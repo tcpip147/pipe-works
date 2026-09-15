@@ -36,7 +36,7 @@ class PipelineManager:
         self._port = self._load_port(self._config_path)
         self._processes: dict[str, BaseProcess] = {}
         self._stopped: set[str] = set()
-        self._statistics: dict[str, dict[str, int]] = {}
+        self._statistics: dict[str, dict[str, int | str]] = {}
         self._lock = threading.RLock()
         self._context = mp.get_context("spawn")
 
@@ -110,17 +110,20 @@ class PipelineManager:
                 "pid": process.pid if process else None,
                 "exit_code": exit_code,
                 "config": str(definition.config_path),
-                "statistics": self._statistics.get(
-                    name,
-                    {
-                        "received_frame_count": 0,
-                        "sent_frame_count": 0,
-                        "inference_success_frame_count": 0,
-                        "inference_failure_frame_count": 0,
-                        "out_of_order_frame_count": 0,
-                    },
-                ).copy(),
+                "statistics": self._statistics.get(name, self._empty_statistics()).copy(),
             }
+
+    @staticmethod
+    def _empty_statistics() -> dict[str, int | str]:
+        return {
+            "received_frame_count": 0,
+            "sent_frame_count": 0,
+            "inference_success_frame_count": 0,
+            "inference_failure_frame_count": 0,
+            "out_of_order_frame_count": 0,
+            "input_rtsp_status": "disconnected",
+            "output_rtsp_status": "disconnected",
+        }
 
     def start(self, name: str) -> dict[str, Any]:
         with self._lock:
@@ -142,13 +145,7 @@ class PipelineManager:
             process.start()
             self._processes[name] = process
             self._stopped.discard(name)
-            self._statistics[name] = {
-                "received_frame_count": 0,
-                "sent_frame_count": 0,
-                "inference_success_frame_count": 0,
-                "inference_failure_frame_count": 0,
-                "out_of_order_frame_count": 0,
-            }
+            self._statistics[name] = self._empty_statistics()
             logger.info("Started pipeline %s (pid=%s)", name, process.pid)
             return self.status(name)
 
@@ -168,18 +165,26 @@ class PipelineManager:
             return self.status(name)
 
     def record_statistics(self, name: str, statistics: dict[str, Any]) -> dict[str, Any]:
-        required = {
+        counters = {
             "received_frame_count",
             "sent_frame_count",
             "inference_success_frame_count",
             "inference_failure_frame_count",
             "out_of_order_frame_count",
         }
+        statuses = {"input_rtsp_status", "output_rtsp_status"}
+        required = counters | statuses
         if name not in self._definitions:
             raise KeyError(name)
         if not isinstance(statistics, dict) or set(statistics) != required or any(
             isinstance(value, bool) or not isinstance(value, int) or value < 0
-            for value in statistics.values()
+            for key, value in statistics.items()
+            if key in counters
+        ) or any(
+            not isinstance(statistics[key], str)
+            or statistics[key]
+            not in {"disconnected", "connected"}
+            for key in statuses
         ):
             raise ValueError("invalid frame statistics")
         with self._lock:

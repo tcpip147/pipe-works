@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 # 순서 이상 프레임 수집 주기 (초)
 TIMESTAMP_ANOMALY_LOG_INTERVAL_SECONDS = 5.0
 out_of_order_frame_count = 0
+input_rtsp_status = "disconnected"
 
 
 def reset_out_of_order_frame_count() -> None:
@@ -20,8 +21,15 @@ def reset_out_of_order_frame_count() -> None:
     out_of_order_frame_count = 0
 
 
+def reset_rtsp_connection_status() -> None:
+    """Reset the input RTSP status for a newly started pipeline."""
+    global input_rtsp_status
+    input_rtsp_status = "disconnected"
+
+
 def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
     global out_of_order_frame_count
+    global input_rtsp_status
 
     import PyNvVideoCodec as nvc
 
@@ -58,6 +66,7 @@ def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
                 logger.error("지원하지 않는 NVDEC 코덱: %s", codec_name)
                 raise ValueError(f"Unsupported NVDEC codec: {codec_name}")
             codec = codec_ids[codec_name]
+            input_rtsp_status = "connected"
 
             logger.info(f"width: {input_stream.width}")
             logger.info(f"height: {input_stream.height}")
@@ -116,6 +125,7 @@ def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
                 yield ReceivedPacket(codec, input_stream, packet_data, bitstream)
 
         except (av.FFmpegError, OSError, IndexError) as error:
+            input_rtsp_status = "disconnected"
             logger.error(f"수신 RTSP 연결 끊김")
 
         finally:

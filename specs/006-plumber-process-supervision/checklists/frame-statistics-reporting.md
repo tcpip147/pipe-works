@@ -2,7 +2,7 @@
 
 **Feature**: [Frame Statistics Reporting](../frame-statistics-reporting.md)
 
-- [x] The one-second reporting interval and five metrics are explicit.
+- [x] The one-second reporting interval, five counters, and two RTSP status fields are explicit.
 - [x] Success and failure behavior is defined.
 - [x] Input validation and unknown-pipeline handling are defined.
 - [x] The status visibility outcome is measurable.

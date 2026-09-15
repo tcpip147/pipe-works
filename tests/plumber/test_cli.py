@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from threading import Thread
 from http.server import ThreadingHTTPServer
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 from unittest import mock
 
 from plumber.cli import PipelineManager, make_handler
@@ -26,6 +27,9 @@ class PipelineManagerTests(unittest.TestCase):
     def test_lists_configured_pipeline_as_stopped(self):
         self.assertEqual(self.manager.list()[0]["state"], "stopped")
         self.assertEqual(self.manager.port, 18080)
+        statistics = self.manager.list()[0]["statistics"]
+        self.assertEqual(statistics["input_rtsp_status"], "disconnected")
+        self.assertEqual(statistics["output_rtsp_status"], "disconnected")
 
     def test_unknown_pipeline_is_rejected(self):
         with self.assertRaises(KeyError):
@@ -57,6 +61,16 @@ class PipelineManagerTests(unittest.TestCase):
                 page = response.read()
             self.assertIn(b"RTSP pipeline control", page)
             self.assertIn(b"Inference Failed", page)
+            self.assertIn(b"endpoint-statuses", page)
+            self.assertIn(b"Input: ", page)
+            self.assertIn(b"Output: ", page)
+            self.assertIn(b"markConnectionsDisconnected", page)
+            self.assertIn(b"Pipeline status request failed", page)
+            self.assertIn(b'card.classList.remove("is-running")', page)
+            self.assertIn(b'textContent = "stopped"', page)
+            self.assertIn(b"function updatePipelineCard", page)
+            self.assertIn(b'if (!isRunning)', page)
+            self.assertNotIn(b'innerHTML = pipelines.length', page)
             with self.assertRaisesRegex(Exception, "404"):
                 urlopen(f"{base_url}/api/pipelines/missing")
             request = Request(
@@ -68,6 +82,8 @@ class PipelineManagerTests(unittest.TestCase):
                         "inference_success_frame_count": 1,
                         "inference_failure_frame_count": 1,
                         "out_of_order_frame_count": 3,
+                        "input_rtsp_status": "connected",
+                        "output_rtsp_status": "disconnected",
                     }
                 ).encode(),
                 headers={"Content-Type": "application/json"},
@@ -78,6 +94,27 @@ class PipelineManagerTests(unittest.TestCase):
             self.assertEqual(statistics["received_frame_count"], 2)
             self.assertEqual(statistics["inference_failure_frame_count"], 1)
             self.assertEqual(statistics["out_of_order_frame_count"], 3)
+            self.assertEqual(statistics["input_rtsp_status"], "connected")
+            self.assertEqual(statistics["output_rtsp_status"], "disconnected")
+
+            invalid_request = Request(
+                f"{base_url}/api/pipelines/camera-a/statistics",
+                data=json.dumps(
+                    {
+                        **statistics,
+                        "output_rtsp_status": "invalid",
+                    }
+                ).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(HTTPError) as error:
+                urlopen(invalid_request)
+            self.assertEqual(error.exception.code, 400)
+            self.assertEqual(
+                self.manager.status("camera-a")["statistics"]["output_rtsp_status"],
+                "disconnected",
+            )
         finally:
             server.shutdown()
             server.server_close()

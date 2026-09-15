@@ -59,6 +59,8 @@ class Sender:
         self._config = config
         self._queue = mp.Queue(maxsize=queue_size)
         self._heartbeat = mp.Value("d", time.monotonic())
+        self._has_successful_mux = mp.Value("b", False)
+        self._awaiting_mux = mp.Value("b", True)
         self._heartbeat_timeout = heartbeat_timeout
         self._monitor_stop = threading.Event()
         self._lock = threading.Lock()
@@ -98,6 +100,19 @@ class Sender:
         self._queue.cancel_join_thread()
         self._queue.close()
 
+    @property
+    def connection_status(self) -> str:
+        """Return output RTSP health from successful-mux heartbeat state."""
+        if not self._has_successful_mux.value:
+            return "disconnected"
+        if self._awaiting_mux.value:
+            return "disconnected"
+        if self._process is None or not self._process.is_alive():
+            return "disconnected"
+        if time.monotonic() - self._heartbeat.value >= self._heartbeat_timeout:
+            return "disconnected"
+        return "connected"
+
     def _monitor_loop(self) -> None:
         while not self._monitor_stop.wait(1):
             with self._lock:
@@ -117,9 +132,17 @@ class Sender:
     def _start_process(self) -> None:
         self._worker_stop = mp.Event()
         self._heartbeat.value = time.monotonic()
+        self._awaiting_mux.value = True
         self._process = mp.Process(
             target=send_worker,
-            args=(self._queue, self._config, self._heartbeat, self._worker_stop),
+            args=(
+                self._queue,
+                self._config,
+                self._heartbeat,
+                self._has_successful_mux,
+                self._awaiting_mux,
+                self._worker_stop,
+            ),
             name="rtsp-sender",
             daemon=True,
         )
@@ -160,7 +183,9 @@ def queue_packets(packet_queue, shutdown_event) -> Iterator[EncodedPacket]:
         yield packet
 
 
-def send_worker(packet_queue, config, heartbeat, shutdown_event) -> None:
+def send_worker(
+    packet_queue, config, heartbeat, has_successful_mux, awaiting_mux, shutdown_event
+) -> None:
     name = config.get("name") if isinstance(config, dict) else None
     if isinstance(name, str) and name.strip():
         # The sender is spawned independently, so it must initialize its own
@@ -168,13 +193,22 @@ def send_worker(packet_queue, config, heartbeat, shutdown_event) -> None:
         from nvidia_pipe.cli import configure_pipeline_logging
 
         configure_pipeline_logging(name.strip())
-    send(config, queue_packets(packet_queue, shutdown_event), heartbeat, shutdown_event)
+    send(
+        config,
+        queue_packets(packet_queue, shutdown_event),
+        heartbeat,
+        has_successful_mux,
+        awaiting_mux,
+        shutdown_event,
+    )
 
 
 def send(
     config: dict[str, Any],
     packets: Iterator[EncodedPacket],
     heartbeat,
+    has_successful_mux,
+    awaiting_mux,
     shutdown_event,
 ) -> None:
     """인코딩 패킷을 RTSP로 mux하고 성공 시 heartbeat를 갱신한다."""
@@ -223,6 +257,8 @@ def send(
                         connected = True
 
                     heartbeat.value = time.monotonic()
+                    has_successful_mux.value = True
+                    awaiting_mux.value = False
                     awaiting_keyframe = False
                     break
 

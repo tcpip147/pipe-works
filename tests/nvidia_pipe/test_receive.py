@@ -58,6 +58,7 @@ class ReceiveTests(unittest.TestCase):
 
     def test_supported_packet_preserves_metadata_and_buffer_ownership(self):
         container = FakeContainer()
+        receive_module.reset_rtsp_connection_status()
 
         with self.nvc_module(), mock.patch(
             "nvidia_pipe.receive.av.open", return_value=container
@@ -72,9 +73,11 @@ class ReceiveTests(unittest.TestCase):
         self.assertEqual(received.packet_data.bsl, 3)
         self.assertEqual(received.packet_data.bsl_data, ctypes.addressof(received.bitstream_buffer))
         self.assertEqual(received.bitstream_buffer.raw[:3], b"abc")
+        self.assertEqual(receive_module.input_rtsp_status, "connected")
 
     def test_connection_error_waits_then_reconnects(self):
         container = FakeContainer()
+        receive_module.reset_rtsp_connection_status()
 
         with self.nvc_module(), mock.patch(
             "nvidia_pipe.receive.av.open", side_effect=[OSError("offline"), container]
@@ -84,6 +87,21 @@ class ReceiveTests(unittest.TestCase):
         self.assertEqual(open_mock.call_count, 2)
         sleep_mock.assert_called_once_with(3)
         self.assertEqual(received.packet_data.pts, 100)
+        self.assertEqual(receive_module.input_rtsp_status, "connected")
+
+    def test_connection_failure_marks_input_as_disconnected_before_retry(self):
+        receive_module.reset_rtsp_connection_status()
+        packets = receive(self.config)
+
+        with self.nvc_module(), mock.patch(
+            "nvidia_pipe.receive.av.open", side_effect=OSError("offline")
+        ), mock.patch(
+            "nvidia_pipe.receive.time.sleep", side_effect=RuntimeError("stop")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "stop"):
+                next(packets)
+
+        self.assertEqual(receive_module.input_rtsp_status, "disconnected")
 
     def test_negative_pts_difference_is_aggregated_and_sets_duration_to_zero(self):
         container = FakeContainer(

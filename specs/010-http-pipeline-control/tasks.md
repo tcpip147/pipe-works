@@ -35,4 +35,4 @@
 
 ## 의존성
 
-`T001 → T002 → T003 → T005 → T007 → T009 → T010` 순서다. `T004`, `T006`, `T008`은 각각 해당 기능 구현 뒤 병렬로 진행할 수 있다.
+`T001 → T002 → T003 → T005 → T007 → T009 → T010` 순서다. `T004`, `T006`, `T008`은 각각 해당 기능 구현 뒤 병렬로 진행할 수 있다. RTSP 상태 표시 작업은 [frame-statistics-display-tasks.md](frame-statistics-display-tasks.md)에서 관리한다.

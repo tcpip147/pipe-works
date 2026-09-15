@@ -16,6 +16,18 @@
 | `exit_code` | 종료된 경우의 결과 코드 |
 | `state` | 현재 운영 상태 |
 
+## RTSP 연결 상태
+
+| 필드 | 설명 | 허용 값 |
+| --- | --- | --- |
+| `input_rtsp_status` | 입력 RTSP의 현재 연결 상태 | `disconnected`, `connected` |
+| `output_rtsp_status` | 출력 RTSP의 현재 연결 상태 | `disconnected`, `connected` |
+
+RTSP 연결 상태는 실행 중인 파이프라인의 실행 상태와 독립적이다. 따라서
+`running`이어도 입력 또는 출력 연결 상태는 `disconnected`일 수 있다. 브라우저
+표시는 `stopped` 또는 상태 조회 실패 시 두 연결 상태를 모두 `disconnected`로
+정규화한다.
+
 ## 상태 전이
 
 ```text

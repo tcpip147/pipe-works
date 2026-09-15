@@ -86,6 +86,8 @@ class CliContractTests(unittest.TestCase):
         cli.inference_success_frame_count = 6
         cli.inference_failure_frame_count = 1
         receive_module.out_of_order_frame_count = 0
+        receive_module.input_rtsp_status = "connected"
+        cli.sender = SimpleNamespace(connection_status="disconnected")
 
         response = mock.MagicMock()
         response.__enter__.return_value = response
@@ -102,6 +104,8 @@ class CliContractTests(unittest.TestCase):
                 "inference_success_frame_count": 6,
                 "inference_failure_frame_count": 1,
                 "out_of_order_frame_count": 0,
+                "input_rtsp_status": "connected",
+                "output_rtsp_status": "disconnected",
             },
         )
 

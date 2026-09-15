@@ -16,13 +16,22 @@ Each pipeline status response contains a `statistics` object with:
 | `inference_success_frame_count` | Frames whose requested inference completed successfully |
 | `inference_failure_frame_count` | Frames whose requested inference raised an error |
 | `out_of_order_frame_count` | Input packets with PTS that is not later than the previous known PTS |
+| `input_rtsp_status` | Input RTSP connection: `disconnected` or `connected` |
+| `output_rtsp_status` | Output RTSP connection: `disconnected` or `connected` |
 
 The `POST /api/pipelines/{name}/statistics` endpoint is used internally by
-the locally spawned pipeline process. It accepts all five fields as
-non-negative integers. Invalid reports and unknown pipeline names are rejected.
+the locally spawned pipeline process. It accepts the five counter fields as
+non-negative integers and both RTSP status fields as defined status strings.
+Invalid reports and unknown pipeline names are rejected.
 If a report cannot be delivered, video processing continues; plumber retains
 the last successfully received snapshot. A newly started pipeline begins with
 all statistics set to zero.
+
+The dashboard shows Input and Output RTSP statuses side by side in each
+pipeline card's Endpoint area. A stopped card, or a card retained after the
+dashboard cannot retrieve pipeline status, displays both RTSP statuses as
+`disconnected` and shows the endpoint as stopped. Periodic updates preserve
+existing cards and controls rather than replacing the whole dashboard.
 
 NVIDIA GPU에서 RTSP 영상을 **수신 → NVDEC 디코딩 → 프레임 처리/추론 → NVENC 인코딩 → RTSP 송출**하는 Python 파이프라인입니다. 여러 파이프라인을 하나의 `plumber` 프로세스로 함께 실행할 수 있습니다.
 

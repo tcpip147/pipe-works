@@ -37,7 +37,14 @@ class SendTests(unittest.TestCase):
         with mock.patch("nvidia_pipe.send.av.open", return_value=container), mock.patch(
             "nvidia_pipe.send.av.Packet", return_value=SimpleNamespace()
         ), self.assertLogs("nvidia_pipe.send", level="INFO") as logs:
-            send(self.config, iter([packet]), heartbeat, shutdown)
+            send(
+                self.config,
+                iter([packet]),
+                heartbeat,
+                SimpleNamespace(value=False),
+                SimpleNamespace(value=True),
+                shutdown,
+            )
 
         self.assertEqual(len(container.muxed), 1)
         self.assertNotEqual(heartbeat.value, 0)
@@ -53,7 +60,14 @@ class SendTests(unittest.TestCase):
         with mock.patch("nvidia_pipe.send.av.open", return_value=container), mock.patch(
             "nvidia_pipe.send.av.Packet", side_effect=lambda data: SimpleNamespace(data=data)
         ):
-            send(self.config, iter(packets), heartbeat, shutdown)
+            send(
+                self.config,
+                iter(packets),
+                heartbeat,
+                SimpleNamespace(value=False),
+                SimpleNamespace(value=True),
+                shutdown,
+            )
 
         self.assertEqual([item.data for item in container.muxed], [bytes([i]) for i in range(100)])
 
@@ -69,7 +83,14 @@ class SendTests(unittest.TestCase):
         with mock.patch("nvidia_pipe.send.av.open", return_value=container) as open_mock, mock.patch(
             "nvidia_pipe.send.av.Packet", side_effect=lambda data: SimpleNamespace(data=data)
         ):
-            send(self.config, packets, heartbeat, shutdown)
+            send(
+                self.config,
+                packets,
+                heartbeat,
+                SimpleNamespace(value=False),
+                SimpleNamespace(value=True),
+                shutdown,
+            )
 
         open_mock.assert_called_once()
         self.assertEqual([item.data for item in container.muxed], [b"idr"])
@@ -96,7 +117,14 @@ class SendTests(unittest.TestCase):
         with mock.patch("nvidia_pipe.send.av.open", side_effect=[first, recovered]) as open_mock, mock.patch(
             "nvidia_pipe.send.av.Packet", side_effect=lambda data: SimpleNamespace(data=data)
         ), mock.patch.object(shutdown, "wait", return_value=False):
-            send(self.config, packets, heartbeat, shutdown)
+            send(
+                self.config,
+                packets,
+                heartbeat,
+                SimpleNamespace(value=False),
+                SimpleNamespace(value=True),
+                shutdown,
+            )
 
         self.assertEqual(open_mock.call_count, 2)
         self.assertEqual([item.data for item in first.muxed], [b"idr-1"])
@@ -113,12 +141,21 @@ class SendTests(unittest.TestCase):
         config = {"name": "camera-a"}
         packet_queue = mock.Mock()
         heartbeat = mock.Mock()
+        has_successful_mux = mock.Mock()
+        awaiting_mux = mock.Mock()
         shutdown = mock.Mock()
 
         with mock.patch("nvidia_pipe.cli.configure_pipeline_logging") as configure_logging, mock.patch(
             "nvidia_pipe.send.send"
         ) as send_mock:
-            send_worker(packet_queue, config, heartbeat, shutdown)
+            send_worker(
+                packet_queue,
+                config,
+                heartbeat,
+                has_successful_mux,
+                awaiting_mux,
+                shutdown,
+            )
 
         configure_logging.assert_called_once_with("camera-a")
         send_mock.assert_called_once()
@@ -162,6 +199,25 @@ class SendTests(unittest.TestCase):
             sender._monitor_loop()
         stop.assert_called_once()
         start.assert_called_once()
+
+    def test_connection_status_requires_a_recent_successful_mux(self):
+        from nvidia_pipe.send import Sender
+
+        sender = Sender(self.config, heartbeat_timeout=10)
+        sender._process = mock.Mock()
+        sender._process.is_alive.return_value = True
+        self.assertEqual(sender.connection_status, "disconnected")
+
+        sender._has_successful_mux.value = True
+        sender._heartbeat.value = 15
+        sender._awaiting_mux.value = True
+        with mock.patch("nvidia_pipe.send.time.monotonic", return_value=20):
+            self.assertEqual(sender.connection_status, "disconnected")
+        sender._awaiting_mux.value = False
+        with mock.patch("nvidia_pipe.send.time.monotonic", return_value=20):
+            self.assertEqual(sender.connection_status, "connected")
+        with mock.patch("nvidia_pipe.send.time.monotonic", return_value=26):
+            self.assertEqual(sender.connection_status, "disconnected")
 
 
 if __name__ == "__main__":

@@ -142,10 +142,23 @@
         height: 17px;
         fill: currentColor;
       }
-      .node span {
+      .node .endpoint-state {
         color: #ced9e7;
         font-size: 0.88rem;
       }
+      .endpoint-statuses {
+        display: flex;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .endpoint-status {
+        color: #8495ab;
+        font-size: 0.68rem;
+        white-space: nowrap;
+      }
+      .endpoint-status strong { font-weight: 700; }
+      .endpoint-status.connected strong { color: #65e6a9; }
+      .endpoint-status.disconnected strong { color: #f19aa7; }
       .statistics {
         display: grid;
         grid-column: 1 / -1;
@@ -308,26 +321,101 @@
       async function request(path) {
         return fetch(path, { method: "POST" });
       }
+      function markConnectionsDisconnected() {
+        document.querySelectorAll(".pipeline-card").forEach((card) => {
+          card.classList.remove("is-running");
+          card.querySelector(".state").textContent = "stopped";
+          card.querySelector(".endpoint-state").textContent = "Stopped";
+        });
+        document.querySelectorAll(".endpoint-status").forEach((status) => {
+          status.classList.remove("connected");
+          status.classList.add("disconnected");
+          status.querySelector("strong").textContent = "disconnected";
+        });
+      }
+      function connectionStatus(statistics, field, isRunning) {
+        if (!isRunning) {
+          return "disconnected";
+        }
+        const value = statistics[field];
+        return ["connected", "disconnected"].includes(value)
+          ? value
+          : "disconnected";
+      }
+      function createPipelineCard(pipeline) {
+        const card = document.createElement("article");
+        card.className = "pipeline-card";
+        card.dataset.pipelineName = pipeline.name;
+        const name = escapeHtml(pipeline.name);
+        card.innerHTML = `<div class="pipeline-name"><small>Pipeline</small><strong title="${name}">${name}</strong><span class="state"></span></div><div class="flow" aria-hidden="true">${icons.arrow}</div><div class="node"><div class="node-icon"></div><div><small>Endpoint</small><span class="endpoint-state"></span><div class="endpoint-statuses"><span class="endpoint-status" data-connection="input">Input: <strong></strong></span><span class="endpoint-status" data-connection="output">Output: <strong></strong></span></div></div></div><div class="actions"><button type="button" title="Start" aria-label="Start ${name}" onclick="request('/api/pipelines/${encodeURIComponent(pipeline.name)}/start').then(refresh)">${icons.play}</button><button class="stop" type="button" title="Stop" aria-label="Stop ${name}" onclick="request('/api/pipelines/${encodeURIComponent(pipeline.name)}/stop').then(refresh)">${icons.stop}</button></div><dl class="statistics"><div class="statistic"><dt>Received</dt><dd data-stat="received_frame_count"></dd></div><div class="statistic"><dt>Sent</dt><dd data-stat="sent_frame_count"></dd></div><div class="statistic success"><dt>Inference OK</dt><dd data-stat="inference_success_frame_count"></dd></div><div class="statistic failure"><dt>Inference Failed</dt><dd data-stat="inference_failure_frame_count"></dd></div><div class="statistic failure"><dt>Out of Order</dt><dd data-stat="out_of_order_frame_count"></dd></div></dl>`;
+        return card;
+      }
+      function updatePipelineCard(card, pipeline) {
+        const isRunning = String(pipeline.state).toLowerCase() === "running";
+        const statistics = pipeline.statistics || {};
+        const count = (field) =>
+          Number.isFinite(statistics[field])
+            ? statistics[field].toLocaleString()
+            : "0";
+        card.classList.toggle("is-running", isRunning);
+        card.querySelector(".state").textContent = pipeline.state;
+        card.querySelector(".node-icon").innerHTML = isRunning ? icons.play : icons.stop;
+        card.querySelector(".endpoint-state").textContent = isRunning ? "Streaming" : "Stopped";
+        [
+          "received_frame_count",
+          "sent_frame_count",
+          "inference_success_frame_count",
+          "inference_failure_frame_count",
+          "out_of_order_frame_count",
+        ].forEach((field) => {
+          card.querySelector(`[data-stat="${field}"]`).textContent = count(field);
+        });
+        [["input", "input_rtsp_status"], ["output", "output_rtsp_status"]].forEach(
+          ([side, field]) => {
+            const status = connectionStatus(statistics, field, isRunning);
+            const endpointStatus = card.querySelector(`[data-connection="${side}"]`);
+            endpointStatus.classList.remove("connected", "disconnected");
+            endpointStatus.classList.add(status);
+            endpointStatus.querySelector("strong").textContent = status;
+          },
+        );
+      }
       async function refresh() {
-        const response = await fetch("/api/pipelines");
-        const pipelines = await response.json();
-        document.querySelector("#pipeline-count").textContent =
-          pipelines.length + " pipelines";
-        document.querySelector("#pipelines").innerHTML = pipelines.length
-          ? pipelines
-              .map((pipeline) => {
-                const name = escapeHtml(pipeline.name);
-                const isRunning =
-                  String(pipeline.state).toLowerCase() === "running";
-                const statistics = pipeline.statistics || {};
-                const count = (field) =>
-                  Number.isFinite(statistics[field])
-                    ? statistics[field].toLocaleString()
-                    : "0";
-                return `<article class="pipeline-card ${isRunning ? "is-running" : ""}"><div class="pipeline-name"><small>Pipeline</small><strong title="${name}">${name}</strong><span class="state">${escapeHtml(pipeline.state)}</span></div><div class="flow" aria-hidden="true">${icons.arrow}</div><div class="node"><div class="node-icon">${isRunning ? icons.play : icons.stop}</div><div><small>Endpoint</small><span>${isRunning ? "Streaming" : "Stopped"}</span></div></div><div class="actions"><button type="button" title="Start" aria-label="Start ${name}" onclick="request('/api/pipelines/${encodeURIComponent(pipeline.name)}/start').then(refresh)">${icons.play}</button><button class="stop" type="button" title="Stop" aria-label="Stop ${name}" onclick="request('/api/pipelines/${encodeURIComponent(pipeline.name)}/stop').then(refresh)">${icons.stop}</button></div><dl class="statistics"><div class="statistic"><dt>Received</dt><dd>${count("received_frame_count")}</dd></div><div class="statistic"><dt>Sent</dt><dd>${count("sent_frame_count")}</dd></div><div class="statistic success"><dt>Inference OK</dt><dd>${count("inference_success_frame_count")}</dd></div><div class="statistic failure"><dt>Inference Failed</dt><dd>${count("inference_failure_frame_count")}</dd></div><div class="statistic failure"><dt>Out of Order</dt><dd>${count("out_of_order_frame_count")}</dd></div></dl></article>`;
-              })
-              .join("")
-          : '<div class="empty">No pipelines available.</div>';
+        try {
+          const response = await fetch("/api/pipelines");
+          if (!response.ok) {
+            throw new Error("Pipeline status request failed");
+          }
+          const pipelines = await response.json();
+          document.querySelector("#pipeline-count").textContent =
+            pipelines.length + " pipelines";
+          const container = document.querySelector("#pipelines");
+          const names = new Set(pipelines.map((pipeline) => pipeline.name));
+          container.querySelectorAll(".pipeline-card").forEach((card) => {
+            if (!names.has(card.dataset.pipelineName)) {
+              card.remove();
+            }
+          });
+          container.querySelector(".empty")?.remove();
+          pipelines.forEach((pipeline) => {
+            let card = Array.from(container.querySelectorAll(".pipeline-card")).find(
+              (item) => item.dataset.pipelineName === pipeline.name,
+            );
+            if (!card) {
+              card = createPipelineCard(pipeline);
+              container.append(card);
+            }
+            updatePipelineCard(card, pipeline);
+          });
+          if (!pipelines.length) {
+            container.insertAdjacentHTML(
+              "beforeend",
+              '<div class="empty">No pipelines available.</div>',
+            );
+          }
+        } catch (_) {
+          markConnectionsDisconnected();
+        }
       }
       refresh();
       setInterval(refresh, 1000);

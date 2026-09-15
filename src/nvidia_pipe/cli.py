@@ -65,9 +65,10 @@ def reset_frame_counters() -> None:
     inference_success_frame_count = 0
     inference_failure_frame_count = 0
     receive_module.reset_out_of_order_frame_count()
+    receive_module.reset_rtsp_connection_status()
 
 
-def frame_statistics() -> dict[str, int]:
+def frame_statistics() -> dict[str, int | str]:
     """Return a snapshot of the current pipeline frame counters."""
     return {
         "received_frame_count": received_frame_count,
@@ -75,6 +76,10 @@ def frame_statistics() -> dict[str, int]:
         "inference_success_frame_count": inference_success_frame_count,
         "inference_failure_frame_count": inference_failure_frame_count,
         "out_of_order_frame_count": receive_module.out_of_order_frame_count,
+        "input_rtsp_status": receive_module.input_rtsp_status,
+        "output_rtsp_status": (
+            sender.connection_status if sender is not None else "disconnected"
+        ),
     }
 
 
