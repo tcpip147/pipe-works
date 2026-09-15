@@ -9,7 +9,7 @@
 ## 실행
 
 ```powershell
-uv run plumber --config plumber.yml --host 127.0.0.1 --port 8080
+uv run plumber --config plumber.yml --host 127.0.0.1
 ```
 
 ## 검증 시나리오
@@ -17,13 +17,13 @@ uv run plumber --config plumber.yml --host 127.0.0.1 --port 8080
 새 PowerShell 창에서 다음을 실행한다.
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8080/api/pipelines
-Invoke-RestMethod -Method Post http://127.0.0.1:8080/api/pipelines/pipe1/start
-Invoke-RestMethod http://127.0.0.1:8080/api/pipelines/pipe1
-Invoke-RestMethod -Method Post http://127.0.0.1:8080/api/pipelines/pipe1/stop
+Invoke-RestMethod http://127.0.0.1:8900/api/pipelines
+Invoke-RestMethod -Method Post http://127.0.0.1:8900/api/pipelines/pipe1/start
+Invoke-RestMethod http://127.0.0.1:8900/api/pipelines/pipe1
+Invoke-RestMethod -Method Post http://127.0.0.1:8900/api/pipelines/pipe1/stop
 ```
 
-목록에서 `pipe1`을 확인하고, 시작 뒤 `running`, 중지 뒤 `stopped` 상태가 반환되는지 확인한다. 브라우저로 `http://127.0.0.1:8080/`를 열어 동일한 동작을 확인한다.
+목록에서 `pipe1`을 확인하고, 시작 뒤 `running`, 중지 뒤 `stopped` 상태가 반환되는지 확인한다. 브라우저로 `http://127.0.0.1:8900/`를 열어 동일한 동작을 확인한다.
 
 ## 자동 검증
 

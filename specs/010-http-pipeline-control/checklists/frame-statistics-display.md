@@ -2,7 +2,7 @@
 
 **Feature**: [Frame Statistics Display](../frame-statistics-display.md)
 
-- [x] All four requested statistics are explicit.
+- [x] All five requested statistics are explicit.
 - [x] Dashboard refresh behavior is defined.
 - [x] Missing-data behavior is defined.
 - [x] Narrow-screen readability is covered.

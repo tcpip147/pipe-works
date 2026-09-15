@@ -51,7 +51,7 @@ received_frame_count = 0
 sent_frame_count = 0
 inference_success_frame_count = 0
 inference_failure_frame_count = 0
-STATISTICS_INTERVAL_SECONDS = 3
+STATISTICS_INTERVAL_SECONDS = 1
 
 
 def reset_frame_counters() -> None:
@@ -96,7 +96,7 @@ def send_frame_statistics(endpoint: str) -> None:
 def start_statistics_reporter(
     endpoint: str,
 ) -> tuple[threading.Event, threading.Thread]:
-    """Report frame statistics every three seconds until stopped."""
+    """Report frame statistics every second until stopped."""
     stop_event = threading.Event()
 
     def report() -> None:

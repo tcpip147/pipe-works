@@ -1,5 +1,29 @@
 # pipe-works
 
+## Frame Statistics Dashboard
+
+When a pipeline is started by `plumber`, its `nvidia-pipe` child reports a
+statistics snapshot to the local plumber HTTP service every second. The
+dashboard refreshes the same values automatically and displays them on each
+pipeline card.
+
+Each pipeline status response contains a `statistics` object with:
+
+| Field | Meaning |
+| --- | --- |
+| `received_frame_count` | Number of decoded frames received by the pipeline |
+| `sent_frame_count` | Number of encoded packets accepted by the sender |
+| `inference_success_frame_count` | Frames whose requested inference completed successfully |
+| `inference_failure_frame_count` | Frames whose requested inference raised an error |
+| `out_of_order_frame_count` | Input packets with PTS that is not later than the previous known PTS |
+
+The `POST /api/pipelines/{name}/statistics` endpoint is used internally by
+the locally spawned pipeline process. It accepts all five fields as
+non-negative integers. Invalid reports and unknown pipeline names are rejected.
+If a report cannot be delivered, video processing continues; plumber retains
+the last successfully received snapshot. A newly started pipeline begins with
+all statistics set to zero.
+
 NVIDIA GPU에서 RTSP 영상을 **수신 → NVDEC 디코딩 → 프레임 처리/추론 → NVENC 인코딩 → RTSP 송출**하는 Python 파이프라인입니다. 여러 파이프라인을 하나의 `plumber` 프로세스로 함께 실행할 수 있습니다.
 
 ## 주요 기능
@@ -49,7 +73,7 @@ uv run plumber --config plumber.yml --host 127.0.0.1
 uv run nvidia-pipe --config pipe.yml
 ```
 
-브라우저에서 `http://127.0.0.1:8080`을 열어 파이프라인을 시작하거나 중지할 수 있습니다. 실행 중에는 `Ctrl+C`로 서버와 실행 중인 파이프라인을 종료할 수 있습니다.
+브라우저에서 `http://127.0.0.1:8900`을 열어 파이프라인을 시작하거나 중지할 수 있습니다. 실행 중에는 `Ctrl+C`로 서버와 실행 중인 파이프라인을 종료할 수 있습니다.
 
 ### REST API
 
@@ -63,8 +87,8 @@ uv run nvidia-pipe --config pipe.yml
 예시:
 
 ```powershell
-Invoke-RestMethod -Method Post http://127.0.0.1:8080/api/pipelines/pipe1/start
-Invoke-RestMethod http://127.0.0.1:8080/api/pipelines
+Invoke-RestMethod -Method Post http://127.0.0.1:8900/api/pipelines/pipe1/start
+Invoke-RestMethod http://127.0.0.1:8900/api/pipelines
 ```
 
 ## 설정
@@ -161,5 +185,5 @@ plumber [-c CONFIG]
 nvidia-pipe [-c CONFIG]
 ```
 
-- `plumber`: 등록된 파이프라인을 HTTP API와 브라우저 화면에서 개별 제어하는 서버를 실행합니다. 기본 주소는 `127.0.0.1:8080`입니다.
+- `plumber`: 등록된 파이프라인을 HTTP API와 브라우저 화면에서 개별 제어하는 서버를 실행합니다. 기본 주소는 `127.0.0.1:8900`입니다.
 - `nvidia-pipe`: 지정한 단일 파이프라인 설정을 실행합니다.

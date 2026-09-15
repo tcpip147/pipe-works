@@ -11,19 +11,19 @@ without leaving its card.
 
 ## Functional Requirements
 
-- **FR-012**: Every pipeline card displays the four latest frame statistics
+- **FR-012**: Every pipeline card displays the five latest frame statistics
   returned with its pipeline status.
-- **FR-013**: Statistics use clear received, sent, inference-success, and
-  inference-failure labels and remain readable on narrow screens.
+- **FR-013**: Statistics use clear received, sent, inference-success,
+  inference-failure, and out-of-order labels and remain readable on narrow
+  screens.
 - **FR-014**: A missing or not-yet-reported statistic displays as zero rather
   than breaking the dashboard.
 - **FR-015**: The dashboard refresh updates the displayed statistics together
-  with pipeline state.
+  with pipeline state every two seconds.
 
 ## Success Criteria
 
-- An operator can read all four latest totals for each visible pipeline from a
+- An operator can read all five latest totals for each visible pipeline from a
   single dashboard card.
 - A pipeline that has not reported statistics still renders a complete card
-  with four zero values.
-
+  with five zero values.
