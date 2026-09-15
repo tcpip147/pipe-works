@@ -1,0 +1,3 @@
+pipelines:
+  - config: pipe.yml
+  - config: pipe2.yml

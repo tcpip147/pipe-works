@@ -1,0 +1,32 @@
+[project]
+name = "pipe-works"
+version = "1.0.0"
+description = "RTSP서버 사이에서 영상을 중계하는 클라이언트"
+requires-python = "==3.11.9"
+dependencies = [
+    "av==18.1.0",
+    "pyyaml==6.0.3",
+    "PyNvVideoCodec==2.2.2",
+    "torch==2.5.1",
+    "numpy==1.26.4",
+    "ultralytics==8.4.146"
+]
+
+[project.scripts]
+plumber = "plumber.cli:main"
+nvidia-pipe = "nvidia_pipe.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.setuptools.packages.find]
+where = ["src"]

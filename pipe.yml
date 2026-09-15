@@ -1,0 +1,20 @@
+name: pipe1
+
+# 입력 스트림
+input:
+  rtsp:
+    url: rtsp://210.99.70.120:1935/live/cctv001.stream
+    transport: tcp
+
+# 출력 스트림
+output:
+  rtsp:
+    url: rtsp://localhost:8554/cctv001
+    transport: tcp
+
+inference:
+  gpuid: 0 # GPU 장치 번호
+  interval_frames: 1 # 추론 주기 (프레임 수)
+  input_format: native # 입력 프레임 포멧 (native, rgb, rgbp)
+  frame_type: pytorch # 입력 프레임 타입 (pytorch)
+  model: examples/inference.py # 추론 모델 파일 경로
