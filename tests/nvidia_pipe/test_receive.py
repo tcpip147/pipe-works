@@ -4,6 +4,7 @@ import sys
 import unittest
 from unittest import mock
 
+import nvidia_pipe.receive as receive_module
 from nvidia_pipe.receive import receive
 
 
@@ -107,6 +108,26 @@ class ReceiveTests(unittest.TestCase):
         summaries = [message for message in logs.output if "시간 순서 이상 프레임" in message]
         self.assertEqual(len(summaries), 1)
         self.assertIn("2건", summaries[0])
+
+    def test_timestamp_order_anomalies_are_counted_globally(self):
+        container = FakeContainer(
+            packets=[
+                FakePacket(pts=100, dts=90),
+                FakePacket(pts=80, dts=70),
+                FakePacket(pts=60, dts=50),
+            ]
+        )
+        receive_module.reset_out_of_order_frame_count()
+
+        with self.nvc_module(), mock.patch(
+            "nvidia_pipe.receive.av.open", return_value=container
+        ):
+            packets = receive(self.config)
+            next(packets)
+            next(packets)
+            next(packets)
+
+        self.assertEqual(receive_module.out_of_order_frame_count, 2)
 
     def test_unsupported_codec_is_logged_and_raised_without_retry(self):
         container = FakeContainer(codec_name="vp9")

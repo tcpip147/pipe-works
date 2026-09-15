@@ -11,9 +11,18 @@ logger = logging.getLogger(__name__)
 
 # 순서 이상 프레임 수집 주기 (초)
 TIMESTAMP_ANOMALY_LOG_INTERVAL_SECONDS = 5.0
+out_of_order_frame_count = 0
+
+
+def reset_out_of_order_frame_count() -> None:
+    """Reset the cumulative input timestamp-order anomaly counter."""
+    global out_of_order_frame_count
+    out_of_order_frame_count = 0
 
 
 def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
+    global out_of_order_frame_count
+
     import PyNvVideoCodec as nvc
 
     input_rtsp = config["input"]["rtsp"]
@@ -84,6 +93,7 @@ def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
                     duration = packet.pts - previous_pts
                     if duration <= 0:
                         timestamp_anomaly_count += 1
+                        out_of_order_frame_count += 1
                     packet_data.duration = max(0, duration)
                 packet_data.key = bool(packet.is_keyframe)
                 packet_data.is_video = True
@@ -93,7 +103,7 @@ def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
                 now = time.monotonic()
                 if now >= next_timestamp_anomaly_log_at:
                     if timestamp_anomaly_count:
-                        logger.debug(
+                        logger.warning(
                             "최근 %.0f초간 시간 순서 이상 프레임: %s건",
                             TIMESTAMP_ANOMALY_LOG_INTERVAL_SECONDS,
                             timestamp_anomaly_count,

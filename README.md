@@ -39,17 +39,33 @@ uv sync
 3. 다음 중 하나를 실행합니다.
 
 ```powershell
-# 모든 파이프라인 실행
-uv run plumber --config plumber.yml
+# HTTP 제어 서버 실행
+uv run plumber --config plumber.yml --host 127.0.0.1
 
 # Windows 배치 파일로 실행
 .\run.bat
 
-# 단일 파이프라인 실행
+# 단일 파이프라인을 직접 실행
 uv run nvidia-pipe --config pipe.yml
 ```
 
-실행 중에는 `Ctrl+C`로 종료할 수 있습니다.
+브라우저에서 `http://127.0.0.1:8080`을 열어 파이프라인을 시작하거나 중지할 수 있습니다. 실행 중에는 `Ctrl+C`로 서버와 실행 중인 파이프라인을 종료할 수 있습니다.
+
+### REST API
+
+| 요청 | 설명 |
+| --- | --- |
+| `GET /api/pipelines` | 등록된 모든 파이프라인의 상태 조회 |
+| `GET /api/pipelines/{name}` | 특정 파이프라인의 상태 조회 |
+| `POST /api/pipelines/{name}/start` | 특정 파이프라인 시작 |
+| `POST /api/pipelines/{name}/stop` | 특정 파이프라인 중지 |
+
+예시:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8080/api/pipelines/pipe1/start
+Invoke-RestMethod http://127.0.0.1:8080/api/pipelines
+```
 
 ## 설정
 
@@ -60,6 +76,8 @@ pipelines:
   - config: pipe.yml
   - config: pipe2.yml
 ```
+
+`port`는 plumber HTTP 서버가 사용할 포트입니다.
 
 각 항목은 개별 파이프라인 YAML 파일을 가리킵니다. 각 파이프라인의 `name`은 반드시 비어 있지 않고 서로 달라야 합니다.
 
@@ -143,5 +161,5 @@ plumber [-c CONFIG]
 nvidia-pipe [-c CONFIG]
 ```
 
-- `plumber`: 기본값 `plumber.yml`을 읽어 등록된 모든 파이프라인을 별도 프로세스로 실행합니다.
+- `plumber`: 등록된 파이프라인을 HTTP API와 브라우저 화면에서 개별 제어하는 서버를 실행합니다. 기본 주소는 `127.0.0.1:8080`입니다.
 - `nvidia-pipe`: 지정한 단일 파이프라인 설정을 실행합니다.

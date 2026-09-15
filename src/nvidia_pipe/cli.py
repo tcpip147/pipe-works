@@ -1,18 +1,23 @@
+import argparse
+import importlib.util
+import logging
+import os
+import json
+import threading
+from dataclasses import replace
 from pathlib import Path
+from types import ModuleType
 from typing import Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 import torch
-import os
 import yaml
-import logging
-import importlib.util
-import argparse
-from types import ModuleType
-from dataclasses import replace
 
-from nvidia_pipe.receive import receive
 from nvidia_pipe.decode import decode
 from nvidia_pipe.encode import encode
+import nvidia_pipe.receive as receive_module
+from nvidia_pipe.receive import receive
 from nvidia_pipe.send import Sender, is_idr_keyframe
 
 
@@ -40,6 +45,68 @@ logger = logging.getLogger(__name__)
 
 sender = None
 
+# Per-pipeline counters. They are reset when a pipeline starts so callers can
+# inspect the live totals for the currently running pipeline.
+received_frame_count = 0
+sent_frame_count = 0
+inference_success_frame_count = 0
+inference_failure_frame_count = 0
+STATISTICS_INTERVAL_SECONDS = 3
+
+
+def reset_frame_counters() -> None:
+    """Reset the global counters for a newly started pipeline."""
+    global received_frame_count
+    global sent_frame_count
+    global inference_success_frame_count
+    global inference_failure_frame_count
+    received_frame_count = 0
+    sent_frame_count = 0
+    inference_success_frame_count = 0
+    inference_failure_frame_count = 0
+    receive_module.reset_out_of_order_frame_count()
+
+
+def frame_statistics() -> dict[str, int]:
+    """Return a snapshot of the current pipeline frame counters."""
+    return {
+        "received_frame_count": received_frame_count,
+        "sent_frame_count": sent_frame_count,
+        "inference_success_frame_count": inference_success_frame_count,
+        "inference_failure_frame_count": inference_failure_frame_count,
+        "out_of_order_frame_count": receive_module.out_of_order_frame_count,
+    }
+
+
+def send_frame_statistics(endpoint: str) -> None:
+    """Send the current counter snapshot to the supervising plumber process."""
+    request = Request(
+        endpoint,
+        data=json.dumps(frame_statistics()).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=1):
+            pass
+    except (OSError, URLError) as error:
+        logger.warning("Could not report frame statistics: %s", error)
+
+
+def start_statistics_reporter(
+    endpoint: str,
+) -> tuple[threading.Event, threading.Thread]:
+    """Report frame statistics every three seconds until stopped."""
+    stop_event = threading.Event()
+
+    def report() -> None:
+        while not stop_event.wait(STATISTICS_INTERVAL_SECONDS):
+            send_frame_statistics(endpoint)
+
+    thread = threading.Thread(target=report, name="frame-statistics", daemon=True)
+    thread.start()
+    return stop_event, thread
+
 
 def configure_pipeline_logging(name: str) -> None:
     """Expose the configured YAML name at the front of every log record."""
@@ -61,7 +128,11 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"필수 설정 섹션이 없습니다: {section}")
     for section in ("input", "output"):
         rtsp = config[section].get("rtsp")
-        if not isinstance(rtsp, dict) or not rtsp.get("url") or not rtsp.get("transport"):
+        if (
+            not isinstance(rtsp, dict)
+            or not rtsp.get("url")
+            or not rtsp.get("transport")
+        ):
             raise ValueError(f"필수 RTSP 설정이 없습니다: {section}.rtsp")
     inference = config["inference"]
     required = ("gpuid", "interval_frames", "input_format", "frame_type", "model")
@@ -136,17 +207,20 @@ def encoded_bytes(encoded) -> bytes:
                 return encoded_bytes(value)
             except TypeError:
                 continue
-    raise TypeError(
-        f"지원하지 않는 인코더 패킷 타입: {type(encoded).__name__}"
-    )
+    raise TypeError(f"지원하지 않는 인코더 패킷 타입: {type(encoded).__name__}")
 
 
 def run_pipeline(config_path: str | Path | None = None) -> None:
     global sender
+    global received_frame_count
+    global sent_frame_count
+    global inference_success_frame_count
+    global inference_failure_frame_count
 
     config = load_config(str(config_path or "application.yml"))
     validate_config(config)
     configure_pipeline_logging(config["name"].strip())
+    reset_frame_counters()
 
     inference = config["inference"]
     gpuid = int(inference["gpuid"])
@@ -164,8 +238,13 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
     frames = decode(config, packets, cuda_stream=pipeline_stream)
 
     def processed_frames():
+        global received_frame_count
+        global inference_success_frame_count
+        global inference_failure_frame_count
+
         frame_index = 0
         for frame in frames:
+            received_frame_count += 1
             if interval_frames == 0:
                 yield frame
             else:
@@ -179,9 +258,13 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
                     else:
                         raise ValueError(f"지원하지 않는 프레임 타입: {frame_type}")
                     frame_index += 1
+                    if should_infer:
+                        inference_success_frame_count += 1
                     if processed_frame is not None:
                         yield processed_frame
                 except Exception as error:
+                    if should_infer:
+                        inference_failure_frame_count += 1
                     logger.debug("추론 실패: %s", error)
                     yield frame
 
@@ -196,17 +279,28 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
         )
 
         sender.submit(cpu_packet)
+        sent_frame_count += 1
 
 
-def run_pipeline_entry(config_path: str | Path | None = None) -> None:
+def run_pipeline_entry(
+    config_path: str | Path | None = None, statistics_endpoint: str | None = None
+) -> None:
+    reporter = None
     try:
+        if statistics_endpoint is not None:
+            reporter = start_statistics_reporter(statistics_endpoint)
         run_pipeline(config_path)
     except KeyboardInterrupt:
         logger.info("사용자 요청으로 종료합니다.")
     finally:
+        if reporter is not None:
+            stop_event, thread = reporter
+            stop_event.set()
+            thread.join(timeout=1)
+            if statistics_endpoint is not None:
+                send_frame_statistics(statistics_endpoint)
         if sender is not None:
             sender.stop()
-
 
 
 def main() -> None:
