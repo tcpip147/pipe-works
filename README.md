@@ -128,6 +128,7 @@ input:
   rtsp:
     url: rtsp://input-server/live/camera-1
     transport: tcp
+    jitter_buffer: 30
 
 output:
   rtsp:
@@ -149,6 +150,7 @@ inference:
 | --- | --- |
 | `name` | 로그와 프로세스를 구분하는 고유 이름 |
 | `input.rtsp` | 입력 RTSP URL 및 전송 방식 (`tcp`) |
+| `input.rtsp.jitter_buffer` | 입력 패킷을 PTS 순서로 안정화하기 위해 보관할 프레임 수. `0` 또는 생략 시 지연 없이 전달 |
 | `output.rtsp` | 송출할 RTSP URL 및 전송 방식 (`tcp`) |
 | `gpuid` | 사용할 NVIDIA GPU 번호 |
 | `interval_frames` | 추론 실행 간격입니다. `1`은 매 프레임, `0`은 추론 콜백을 건너뜁니다. |

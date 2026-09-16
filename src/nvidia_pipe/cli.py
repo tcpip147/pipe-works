@@ -237,6 +237,13 @@ def validate_config(config: dict[str, Any]) -> None:
             or not rtsp.get("transport")
         ):
             raise ValueError(f"필수 RTSP 설정이 없습니다: {section}.rtsp")
+    jitter_buffer = config["input"]["rtsp"].get("jitter_buffer", 0)
+    if (
+        isinstance(jitter_buffer, bool)
+        or not isinstance(jitter_buffer, int)
+        or jitter_buffer < 0
+    ):
+        raise ValueError("input.rtsp.jitter_buffer must be a non-negative integer")
     inference = config["inference"]
     required = ("gpuid", "interval_frames", "input_format", "frame_type", "model")
     missing = [key for key in required if key not in inference]

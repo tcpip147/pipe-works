@@ -1,6 +1,7 @@
 import av
 import time
 import ctypes
+import heapq
 import logging
 from collections.abc import Iterator
 from typing import Any
@@ -13,6 +14,14 @@ logger = logging.getLogger(__name__)
 TIMESTAMP_ANOMALY_LOG_INTERVAL_SECONDS = 5.0
 out_of_order_frame_count = 0
 input_rtsp_status = "disconnected"
+
+
+def jitter_buffer_size(config: dict[str, Any]) -> int:
+    """Read the bounded input jitter-buffer size expressed in packets."""
+    value = config["input"]["rtsp"].get("jitter_buffer", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("input.rtsp.jitter_buffer must be a non-negative integer")
+    return value
 
 
 def reset_out_of_order_frame_count() -> None:
@@ -31,11 +40,12 @@ def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
     global out_of_order_frame_count
     global input_rtsp_status
 
-    import PyNvVideoCodec as nvc
-
     input_rtsp = config["input"]["rtsp"]
     url = input_rtsp["url"]
     transport = input_rtsp["transport"]
+    buffer_size = jitter_buffer_size(config)
+
+    import PyNvVideoCodec as nvc
 
     codec_ids = {
         "h264": nvc.cudaVideoCodec.H264,
@@ -77,6 +87,8 @@ def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
             )
 
             previous_pts = None
+            jitter_packets: list[tuple[int, int, ReceivedPacket]] = []
+            jitter_sequence = 0
 
             for packet in container.demux(video=0):
                 if not packet:
@@ -122,7 +134,20 @@ def receive(config: dict[str, Any]) -> Iterator[ReceivedPacket]:
                         now + TIMESTAMP_ANOMALY_LOG_INTERVAL_SECONDS
                     )
 
-                yield ReceivedPacket(codec, input_stream, packet_data, bitstream)
+                received_packet = ReceivedPacket(
+                    codec, input_stream, packet_data, bitstream
+                )
+                if buffer_size == 0:
+                    yield received_packet
+                    continue
+
+                heapq.heappush(
+                    jitter_packets,
+                    (packet_data.pts, jitter_sequence, received_packet),
+                )
+                jitter_sequence += 1
+                if len(jitter_packets) > buffer_size:
+                    yield heapq.heappop(jitter_packets)[2]
 
         except (av.FFmpegError, OSError, IndexError) as error:
             input_rtsp_status = "disconnected"

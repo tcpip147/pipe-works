@@ -75,6 +75,46 @@ class ReceiveTests(unittest.TestCase):
         self.assertEqual(received.bitstream_buffer.raw[:3], b"abc")
         self.assertEqual(receive_module.input_rtsp_status, "connected")
 
+    def test_jitter_buffer_orders_packets_after_the_configured_delay(self):
+        config = {
+            "input": {
+                "rtsp": {
+                    "url": "rtsp://example/live",
+                    "transport": "tcp",
+                    "jitter_buffer": 2,
+                }
+            }
+        }
+        container = FakeContainer(
+            packets=[
+                FakePacket(pts=30, dts=30),
+                FakePacket(pts=10, dts=10),
+                FakePacket(pts=20, dts=20),
+                FakePacket(pts=40, dts=40),
+            ]
+        )
+
+        with self.nvc_module(), mock.patch(
+            "nvidia_pipe.receive.av.open", return_value=container
+        ):
+            packets = receive(config)
+            self.assertEqual(next(packets).packet_data.pts, 10)
+            self.assertEqual(next(packets).packet_data.pts, 20)
+
+    def test_jitter_buffer_requires_a_non_negative_integer(self):
+        config = {
+            "input": {
+                "rtsp": {
+                    "url": "rtsp://example/live",
+                    "transport": "tcp",
+                    "jitter_buffer": -1,
+                }
+            }
+        }
+
+        with self.assertRaisesRegex(ValueError, "jitter_buffer"):
+            next(receive(config))
+
     def test_connection_error_waits_then_reconnects(self):
         container = FakeContainer()
         receive_module.reset_rtsp_connection_status()

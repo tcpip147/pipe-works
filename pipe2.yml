@@ -5,6 +5,7 @@ input:
   rtsp:
     url: rtsp://210.99.70.120:1935/live/cctv002.stream
     transport: tcp
+    jitter_buffer: 30 # 버퍼링 (프레임 수)
 
 # 출력 스트림
 output:

@@ -25,6 +25,12 @@ class CliContractTests(unittest.TestCase):
     def test_valid_config_passes(self):
         validate_config(self.valid())
 
+    def test_jitter_buffer_config_requires_a_non_negative_integer(self):
+        config = self.valid()
+        config["input"]["rtsp"]["jitter_buffer"] = -1
+        with self.assertRaisesRegex(ValueError, "jitter_buffer"):
+            validate_config(config)
+
     def test_parameter_aware_and_legacy_callbacks_are_detected(self):
         def aware(frame, infer, parameters):
             return frame
@@ -39,7 +45,7 @@ class CliContractTests(unittest.TestCase):
         original = self.valid()
         original["inference"]["parameters"] = {"font-size": 14}
         replacement = self.valid()
-        replacement["inference"]["parameters"] = {"font-size": 28}
+        replacement["inference"]["parameters"] = {"font-size": 280}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as file:
             yaml_path = file.name
             yaml.safe_dump(original, file)
@@ -50,12 +56,12 @@ class CliContractTests(unittest.TestCase):
                 yaml.safe_dump(replacement, file)
             stat = os.stat(yaml_path)
             os.utime(yaml_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
-            self.assertEqual(parameters.refresh(), {"font-size": 28})
+            self.assertEqual(parameters.refresh(), {"font-size": 280})
             with open(yaml_path, "w", encoding="utf-8") as file:
                 file.write("inference: [")
             stat = os.stat(yaml_path)
             os.utime(yaml_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
-            self.assertEqual(parameters.refresh(), {"font-size": 28})
+            self.assertEqual(parameters.refresh(), {"font-size": 280})
         finally:
             os.unlink(yaml_path)
 
