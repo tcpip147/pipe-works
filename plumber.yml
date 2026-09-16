@@ -1,5 +1,7 @@
 port: 8900
 
+auto_start: true
+
 pipelines:
   - config: pipe.yml
   - config: pipe2.yml

@@ -55,6 +55,17 @@
         font-size: 0.86rem;
         white-space: nowrap;
       }
+      .all-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .start-all {
+        width: auto;
+        min-height: 40px;
+        padding: 0 14px;
+        font-weight: 700;
+      }
       #pipelines {
         display: grid;
         gap: 14px;
@@ -295,7 +306,10 @@
             RTSP pipeline control — monitor every stream at a glance.
           </p>
         </div>
-        <span class="count" id="pipeline-count">Loading...</span>
+        <div class="all-actions">
+          <button class="start-all" type="button" title="Start all pipelines" onclick="startAll()">Start all</button>
+          <span class="count" id="pipeline-count">Loading...</span>
+        </div>
       </header>
       <section id="pipelines" aria-live="polite"></section>
     </main>
@@ -320,6 +334,13 @@
         );
       async function request(path) {
         return fetch(path, { method: "POST" });
+      }
+      async function startAll() {
+        const response = await request("/api/pipelines/start-all");
+        if (!response.ok) {
+          throw new Error("Could not start all pipelines");
+        }
+        await refresh();
       }
       function markConnectionsDisconnected() {
         document.querySelectorAll(".pipeline-card").forEach((card) => {

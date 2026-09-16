@@ -30,6 +30,31 @@ class PipelineManagerTests(unittest.TestCase):
         statistics = self.manager.list()[0]["statistics"]
         self.assertEqual(statistics["input_rtsp_status"], "disconnected")
         self.assertEqual(statistics["output_rtsp_status"], "disconnected")
+        self.assertFalse(self.manager.auto_start)
+
+    def test_auto_start_starts_all_pipelines_only_when_enabled(self):
+        with mock.patch.object(self.manager, "start_all", return_value=[]) as start_all:
+            self.assertEqual(self.manager.start_configured_pipelines(), [])
+        start_all.assert_not_called()
+
+        config_path = Path(self.directory.name) / "plumber.yml"
+        config_path.write_text(
+            "port: 18080\nauto_start: true\npipelines:\n  - config: pipe.yml\n",
+            encoding="utf-8",
+        )
+        enabled = PipelineManager(config_path)
+        with mock.patch.object(enabled, "start_all", return_value=[{"name": "camera-a"}]) as start_all:
+            self.assertEqual(enabled.start_configured_pipelines(), [{"name": "camera-a"}])
+        start_all.assert_called_once()
+
+    def test_auto_start_requires_a_boolean(self):
+        config_path = Path(self.directory.name) / "plumber.yml"
+        config_path.write_text(
+            "port: 18080\nauto_start: enabled\npipelines:\n  - config: pipe.yml\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "auto_start"):
+            PipelineManager(config_path)
 
     def test_unknown_pipeline_is_rejected(self):
         with self.assertRaises(KeyError):
@@ -49,6 +74,16 @@ class PipelineManagerTests(unittest.TestCase):
         )
         self.assertEqual(result["state"], "running")
 
+    def test_start_all_starts_every_configured_pipeline(self):
+        process = mock.Mock(pid=123, exitcode=None)
+        process.is_alive.return_value = True
+        with mock.patch.object(
+            self.manager._context, "Process", return_value=process
+        ) as process_factory:
+            result = self.manager.start_all()
+        self.assertEqual([item["name"] for item in result], ["camera-a"])
+        process_factory.assert_called_once()
+
     def test_http_api_lists_pipelines_and_rejects_unknown_name(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.manager))
         thread = Thread(target=server.serve_forever)
@@ -57,9 +92,16 @@ class PipelineManagerTests(unittest.TestCase):
             base_url = f"http://127.0.0.1:{server.server_port}"
             with urlopen(f"{base_url}/api/pipelines") as response:
                 self.assertIn(b'"camera-a"', response.read())
+            request = Request(f"{base_url}/api/pipelines/start-all", method="POST")
+            with mock.patch.object(self.manager, "start_all", return_value=[]) as start_all:
+                with urlopen(request) as response:
+                    self.assertEqual(json.load(response), [])
+            start_all.assert_called_once()
             with urlopen(f"{base_url}/") as response:
                 page = response.read()
             self.assertIn(b"RTSP pipeline control", page)
+            self.assertIn(b"start-all", page)
+            self.assertIn(b"function startAll", page)
             self.assertIn(b"Inference Failed", page)
             self.assertIn(b"endpoint-statuses", page)
             self.assertIn(b"Input: ", page)

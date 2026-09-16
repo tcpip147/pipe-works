@@ -91,6 +91,7 @@ uv run nvidia-pipe --config pipe.yml
 | `GET /api/pipelines` | 등록된 모든 파이프라인의 상태 조회 |
 | `GET /api/pipelines/{name}` | 특정 파이프라인의 상태 조회 |
 | `POST /api/pipelines/{name}/start` | 특정 파이프라인 시작 |
+| `POST /api/pipelines/start-all` | 등록된 모든 파이프라인 시작 |
 | `POST /api/pipelines/{name}/stop` | 특정 파이프라인 중지 |
 
 예시:
@@ -109,6 +110,10 @@ pipelines:
   - config: pipe.yml
   - config: pipe2.yml
 ```
+
+`auto_start: true`를 `plumber.yml` 최상위에 추가하면 `plumber` 앱이 시작될 때 등록된
+모든 파이프라인을 자동으로 시작합니다. 생략하거나 `false`로 설정하면 기존처럼 화면 또는
+API를 통해 수동으로 시작합니다.
 
 `port`는 plumber HTTP 서버가 사용할 포트입니다.
 

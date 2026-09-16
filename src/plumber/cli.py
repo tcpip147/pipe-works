@@ -34,6 +34,7 @@ class PipelineManager:
         self._config_path = Path(config_path).resolve()
         self._definitions = self._load_definitions(self._config_path)
         self._port = self._load_port(self._config_path)
+        self._auto_start = self._load_auto_start(self._config_path)
         self._processes: dict[str, BaseProcess] = {}
         self._stopped: set[str] = set()
         self._statistics: dict[str, dict[str, int | str]] = {}
@@ -81,9 +82,20 @@ class PipelineManager:
             )
         return port
 
+    @classmethod
+    def _load_auto_start(cls, plumber_path: Path) -> bool:
+        auto_start = cls._load_yaml(plumber_path).get("auto_start", False)
+        if not isinstance(auto_start, bool):
+            raise ValueError("plumber auto_start must be true or false")
+        return auto_start
+
     @property
     def port(self) -> int:
         return self._port
+
+    @property
+    def auto_start(self) -> bool:
+        return self._auto_start
 
     def list(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -148,6 +160,14 @@ class PipelineManager:
             self._statistics[name] = self._empty_statistics()
             logger.info("Started pipeline %s (pid=%s)", name, process.pid)
             return self.status(name)
+
+    def start_all(self) -> list[dict[str, Any]]:
+        """Start every configured pipeline, leaving running processes untouched."""
+        return [self.start(name) for name in sorted(self._definitions)]
+
+    def start_configured_pipelines(self) -> list[dict[str, Any]]:
+        """Start all pipelines only when plumber.yml opts into auto-start."""
+        return self.start_all() if self.auto_start else []
 
     def stop(self, name: str) -> dict[str, Any]:
         with self._lock:
@@ -234,6 +254,9 @@ def make_handler(manager: PipelineManager) -> type[BaseHTTPRequestHandler]:
             parts = [
                 unquote(part) for part in urlparse(self.path).path.split("/") if part
             ]
+            if parts == ["api", "pipelines", "start-all"]:
+                self._send_json(HTTPStatus.OK, manager.start_all())
+                return
             if (
                 len(parts) == 4
                 and parts[:2] == ["api", "pipelines"]
@@ -291,6 +314,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     manager = PipelineManager(args.config)
+    manager.start_configured_pipelines()
     server = ThreadingHTTPServer((args.host, manager.port), make_handler(manager))
     logger.info(
         "Pipeline control server listening at http://%s:%s", args.host, manager.port

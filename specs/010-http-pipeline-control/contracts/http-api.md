@@ -48,6 +48,13 @@
 - 성공: `200 OK`, 상태 표현
 - 이름 없음: `404 Not Found`, `{"error": "pipeline not found"}`
 
+## `POST /api/pipelines/start-all`
+
+Starts every configured pipeline and returns an array of status representations.
+Pipelines that are already running keep their existing process and status.
+
+- Success: `200 OK`, status representation array
+
 ## `POST /api/pipelines/{name}/stop`
 
 파이프라인을 중지하고 상태를 반환한다.
