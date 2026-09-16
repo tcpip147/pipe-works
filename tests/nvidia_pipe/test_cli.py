@@ -1,18 +1,62 @@
 import unittest
 import logging
 import json
+import os
+import tempfile
 from types import SimpleNamespace
 from unittest import mock
 
+import yaml
+
 import nvidia_pipe.cli as cli
 import nvidia_pipe.receive as receive_module
-from nvidia_pipe.cli import PIPELINE_NAME_FILTER, configure_pipeline_logging, validate_config
+from nvidia_pipe.cli import (
+    PIPELINE_NAME_FILTER,
+    LiveParameters,
+    callback_accepts_parameters,
+    configure_pipeline_logging,
+    validate_config,
+)
 
 class CliContractTests(unittest.TestCase):
     def valid(self):
         return {"name":"pipe-a","input":{"rtsp":{"url":"rtsp://in","transport":"tcp"}},"output":{"rtsp":{"url":"rtsp://out","transport":"tcp"}},"inference":{"gpuid":0,"interval_frames":1,"input_format":"native","frame_type":"pytorch","model":"model.py"}}
     def test_valid_config_passes(self):
         validate_config(self.valid())
+
+    def test_parameter_aware_and_legacy_callbacks_are_detected(self):
+        def aware(frame, infer, parameters):
+            return frame
+
+        def legacy(frame, infer):
+            return frame
+
+        self.assertTrue(callback_accepts_parameters(aware))
+        self.assertFalse(callback_accepts_parameters(legacy))
+
+    def test_live_parameters_reload_valid_yaml_and_keep_last_valid_values(self):
+        original = self.valid()
+        original["inference"]["parameters"] = {"font-size": 14}
+        replacement = self.valid()
+        replacement["inference"]["parameters"] = {"font-size": 28}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as file:
+            yaml_path = file.name
+            yaml.safe_dump(original, file)
+        try:
+            parameters = LiveParameters(yaml_path, original)
+            self.assertEqual(parameters.refresh(), {"font-size": 14})
+            with open(yaml_path, "w", encoding="utf-8") as file:
+                yaml.safe_dump(replacement, file)
+            stat = os.stat(yaml_path)
+            os.utime(yaml_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+            self.assertEqual(parameters.refresh(), {"font-size": 28})
+            with open(yaml_path, "w", encoding="utf-8") as file:
+                file.write("inference: [")
+            stat = os.stat(yaml_path)
+            os.utime(yaml_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+            self.assertEqual(parameters.refresh(), {"font-size": 28})
+        finally:
+            os.unlink(yaml_path)
     def test_invalid_config_fails(self):
         with self.assertRaises(ValueError): validate_config({})
         config = self.valid(); config["inference"]["interval_frames"] = -1
@@ -79,6 +123,7 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(cli.inference_failure_frame_count, 1)
         self.assertEqual(receive_module.out_of_order_frame_count, 0)
         self.assertEqual(len(submitted_packets), 2)
+        self.assertEqual(model.on_frame.call_args.kwargs["parameters"], {})
 
     def test_send_frame_statistics_posts_all_counters(self):
         cli.received_frame_count = 8

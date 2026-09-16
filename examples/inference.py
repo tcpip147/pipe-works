@@ -18,13 +18,33 @@ _GLYPHS = {
     " ": ("000", "000", "000", "000", "000"),
 }
 
-_GREEN_Y = 150
-_GREEN_U = 43
-_GREEN_V = 21
+_DEFAULT_FONT_SIZE = 14
+_DEFAULT_YUV = (150, 43, 21)
 _last_inference_result: str | None = None
 
 
-def _draw_timestamp_nv12(frame: GpuFrame, timestamp: str) -> None:
+def _overlay_parameters(parameters: dict | None) -> tuple[int, tuple[int, int, int]]:
+    """Validate model parameters without letting a bad live edit drop a frame."""
+    parameters = parameters if isinstance(parameters, dict) else {}
+    font_size = parameters.get("font-size", _DEFAULT_FONT_SIZE)
+    try:
+        scale = max(1, min(4, int(font_size) // 7))
+    except (TypeError, ValueError):
+        scale = max(1, _DEFAULT_FONT_SIZE // 7)
+
+    yuv = parameters.get("yuv", _DEFAULT_YUV)
+    if (
+        not isinstance(yuv, (list, tuple))
+        or len(yuv) != 3
+        or any(not isinstance(value, int) or not 0 <= value <= 255 for value in yuv)
+    ):
+        yuv = _DEFAULT_YUV
+    return scale, (yuv[0], yuv[1], yuv[2])
+
+
+def _draw_timestamp_nv12(
+    frame: GpuFrame, timestamp: str, parameters: dict | None = None
+) -> None:
     """Draw a timestamp on the NV12 luma plane without copying the frame to CPU."""
     if frame.pixel_format.upper() != "NV12":
         raise ValueError("The basic timestamp example requires NV12 input frames")
@@ -42,7 +62,10 @@ def _draw_timestamp_nv12(frame: GpuFrame, timestamp: str) -> None:
     glyph_width = 3
     glyph_spacing = 1
     margin = 8
-    scale = max(1, min(4, (frame.width - 2 * margin) // (len(timestamp) * 4)))
+    scale, (luma_value, chroma_u, chroma_v) = _overlay_parameters(parameters)
+    max_width_scale = max(1, (frame.width - 2 * margin) // (len(timestamp) * 4))
+    max_height_scale = max(1, (frame.height - 2 * margin) // len(_GLYPHS["0"]))
+    scale = min(scale, max_width_scale, max_height_scale)
     text_width = (
         len(timestamp) * (glyph_width + glyph_spacing) * scale - glyph_spacing * scale
     )
@@ -58,24 +81,26 @@ def _draw_timestamp_nv12(frame: GpuFrame, timestamp: str) -> None:
                     y_end = y + (row + 1) * scale
                     x_start = x + column * scale
                     x_end = x + (column + 1) * scale
-                    luma[y_start:y_end, x_start:x_end] = _GREEN_Y
+                    luma[y_start:y_end, x_start:x_end] = luma_value
 
                     chroma_y_start = frame.height + y_start // 2
                     chroma_y_end = frame.height + (y_end + 1) // 2
                     chroma_x_start = (x_start // 2) * 2
                     chroma_x_end = ((x_end + 1) // 2) * 2
-                    nv12[chroma_y_start:chroma_y_end, chroma_x_start:chroma_x_end:2] = _GREEN_U
-                    nv12[chroma_y_start:chroma_y_end, chroma_x_start + 1:chroma_x_end:2] = _GREEN_V
+                    nv12[chroma_y_start:chroma_y_end, chroma_x_start:chroma_x_end:2] = chroma_u
+                    nv12[chroma_y_start:chroma_y_end, chroma_x_start + 1:chroma_x_end:2] = chroma_v
         x += (glyph_width + glyph_spacing) * scale
 
     frame.set_frame_data(nv12)
 
 
-def on_frame(frame: GpuFrame, infer: bool) -> GpuFrame:
+def on_frame(
+    frame: GpuFrame, infer: bool, parameters: dict | None = None
+) -> GpuFrame:
     global _last_inference_result
 
     if infer or _last_inference_result is None:
         _last_inference_result = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    _draw_timestamp_nv12(frame, _last_inference_result)
+    _draw_timestamp_nv12(frame, _last_inference_result, parameters)
     return frame

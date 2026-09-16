@@ -135,6 +135,9 @@ inference:
   input_format: native
   frame_type: pytorch
   model: examples/inference.py
+  parameters:
+    font-size: 14
+    yuv: [150, 43, 21]
 ```
 
 | 항목 | 설명 |
@@ -147,6 +150,7 @@ inference:
 | `input_format` | 디코더 출력 형식: `native`, `rgb`, `rgbp` |
 | `frame_type` | 현재 지원값은 `pytorch` |
 | `model` | `on_frame` 함수를 제공하는 Python 파일 경로 |
+| `parameters` | 모델 콜백에 전달할 임의의 YAML 매핑. 실행 중 저장하면 다음 프레임부터 반영됩니다. |
 
 입력 코덱은 H.264와 HEVC/H.265를 지원합니다. 출력은 입력 프레임의 코덱, 해상도, 시간 기준을 유지해 송출합니다.
 
@@ -158,12 +162,17 @@ inference:
 from nvidia_pipe.stream import GpuFrame
 
 
-def on_frame(frame: GpuFrame, infer: bool) -> GpuFrame:
+def on_frame(frame: GpuFrame, infer: bool, parameters: dict) -> GpuFrame:
     # infer=True: 이번 프레임에서 추론을 수행할 차례
     # infer=False: 이전 추론 결과를 재사용할 차례
     # GPU 프레임을 수정하거나 분석한 뒤 반환
     return frame
 ```
+
+기존 `on_frame(frame, infer)` 형식도 계속 지원됩니다. 실행 중에는
+`inference.parameters`만 다시 읽습니다. RTSP 주소, GPU, 모델 경로 등 다른 설정을
+바꾼 경우에는 파이프라인을 재시작해야 합니다. YAML이 저장 중이어서 읽을 수 없으면
+마지막으로 성공한 파라미터를 계속 사용합니다.
 
 `examples/inference.py`는 NV12 GPU 프레임의 오른쪽 위에 현재 시간을 그리는 최소 예제입니다. `torch.from_dlpack()`을 이용해 CPU 복사 없이 프레임 데이터에 접근합니다.
 

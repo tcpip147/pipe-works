@@ -69,6 +69,37 @@ class InferenceExampleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "NV12"):
             inference.on_frame(frame, infer=True)
 
+    def test_timestamp_overlay_uses_parameterized_yuv_and_font_size(self):
+        timestamp = "2026-09-15 12:34:56"
+        small = FakeFrame()
+        large = FakeFrame()
+
+        inference._draw_timestamp_nv12(
+            small, timestamp, {"font-size": 7, "yuv": [101, 102, 103]}
+        )
+        inference._draw_timestamp_nv12(
+            large, timestamp, {"font-size": 28, "yuv": [101, 102, 103]}
+        )
+
+        self.assertTrue(torch.any(small.frame_data == 101))
+        self.assertTrue(torch.any(small.frame_data == 102))
+        self.assertTrue(torch.any(small.frame_data == 103))
+        self.assertGreater(
+            torch.count_nonzero(large.frame_data[: large.height]).item(),
+            torch.count_nonzero(small.frame_data[: small.height]).item(),
+        )
+
+    def test_timestamp_overlay_falls_back_for_invalid_parameters(self):
+        frame = FakeFrame()
+
+        inference._draw_timestamp_nv12(
+            frame, "2026-09-15 12:34:56", {"font-size": "bad", "yuv": [1, 2]}
+        )
+
+        self.assertTrue(torch.any(frame.frame_data == 150))
+        self.assertTrue(torch.any(frame.frame_data == 43))
+        self.assertTrue(torch.any(frame.frame_data == 21))
+
 
 if __name__ == "__main__":
     unittest.main()

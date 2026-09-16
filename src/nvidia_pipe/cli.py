@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import inspect
 import logging
 import os
 import json
@@ -124,6 +125,63 @@ def load_config(path: str) -> dict[str, Any]:
         return yaml.safe_load(file)
 
 
+def inference_parameters(config: dict[str, Any]) -> dict[str, Any]:
+    """Return a safe copy of the model-owned inference parameters mapping."""
+    inference = config.get("inference")
+    if not isinstance(inference, dict):
+        return {}
+    parameters = inference.get("parameters", {})
+    if parameters is None:
+        return {}
+    if not isinstance(parameters, dict):
+        raise ValueError("inference.parameters는 YAML 매핑이어야 합니다")
+    return dict(parameters)
+
+
+class LiveParameters:
+    """Keep the last valid model parameters while a YAML file is edited live."""
+
+    def __init__(self, config_path: str | Path, config: dict[str, Any]) -> None:
+        self.config_path = Path(config_path)
+        self.parameters = inference_parameters(config)
+        self._observed_revision = self._revision()
+
+    def _revision(self) -> tuple[int, int] | None:
+        try:
+            stat = self.config_path.stat()
+        except OSError:
+            return None
+        return (stat.st_mtime_ns, stat.st_size)
+
+    def refresh(self) -> dict[str, Any]:
+        revision = self._revision()
+        if revision == self._observed_revision:
+            return self.parameters
+        self._observed_revision = revision
+        try:
+            reloaded = load_config(str(self.config_path))
+            if not isinstance(reloaded, dict):
+                raise ValueError("파이프라인 설정은 YAML 매핑이어야 합니다")
+            self.parameters = inference_parameters(reloaded)
+            logger.info("변경된 inference.parameters를 적용했습니다: %s", self.config_path)
+        except (OSError, yaml.YAMLError, ValueError) as error:
+            logger.warning(
+                "inference.parameters를 다시 읽지 못해 마지막 정상 값을 사용합니다: %s (%s)",
+                self.config_path,
+                error,
+            )
+        return self.parameters
+
+
+def callback_accepts_parameters(callback: Any) -> bool:
+    """Return whether a model callback can be invoked with parameters safely."""
+    try:
+        inspect.signature(callback).bind(None, infer=True, parameters={})
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 def validate_config(config: dict[str, Any]) -> None:
     name = config.get("name")
     if not isinstance(name, str) or not name.strip():
@@ -222,7 +280,8 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
     global inference_success_frame_count
     global inference_failure_frame_count
 
-    config = load_config(str(config_path or "application.yml"))
+    resolved_config_path = Path(config_path or "application.yml")
+    config = load_config(str(resolved_config_path))
     validate_config(config)
     configure_pipeline_logging(config["name"].strip())
     reset_frame_counters()
@@ -234,6 +293,8 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
     model = inference["model"]
     configure_cuda_dll_path()
     model_module = load_module(model)
+    live_parameters = LiveParameters(resolved_config_path, config)
+    model_accepts_parameters = callback_accepts_parameters(model_module.on_frame)
 
     sender = Sender(config, heartbeat_timeout=10)
     sender.start()
@@ -257,9 +318,16 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
                 try:
                     if frame_type == "pytorch":
                         with torch.cuda.stream(pipeline_stream), torch.inference_mode():
-                            processed_frame = model_module.on_frame(
-                                frame, infer=should_infer
-                            )
+                            if model_accepts_parameters:
+                                processed_frame = model_module.on_frame(
+                                    frame,
+                                    infer=should_infer,
+                                    parameters=live_parameters.refresh(),
+                                )
+                            else:
+                                processed_frame = model_module.on_frame(
+                                    frame, infer=should_infer
+                                )
                     else:
                         raise ValueError(f"지원하지 않는 프레임 타입: {frame_type}")
                     frame_index += 1
