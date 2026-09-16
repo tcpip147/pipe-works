@@ -174,6 +174,16 @@ def on_frame(frame: GpuFrame, infer: bool, parameters: dict) -> GpuFrame:
 바꾼 경우에는 파이프라인을 재시작해야 합니다. YAML이 저장 중이어서 읽을 수 없으면
 마지막으로 성공한 파라미터를 계속 사용합니다.
 
+`inference.model` 파일도 실행 중 감지합니다. 유효한 Python 파일을 저장하면 다음
+프레임 경계에서 새 `on_frame` 함수로 교체됩니다. 저장 도중의 문법 오류, import 오류,
+또는 `on_frame` 누락은 로그로 남기고 기존 모델을 계속 사용하므로 스트림은 중단되지
+않습니다. 성공적으로 교체된 모델의 모듈 전역 상태는 새로 시작됩니다.
+
+`inference.model` 파일도 실행 중 감지합니다. 유효한 Python 파일을 저장하면 다음
+프레임 경계에서 새 `on_frame` 함수로 교체됩니다. 저장 도중의 문법 오류, import 오류,
+또는 `on_frame` 누락은 로그로 남기고 기존 모델을 계속 사용하므로 스트림은 중단되지
+않습니다. 성공적으로 교체된 모델의 모듈 전역 상태는 새로 시작됩니다.
+
 `examples/inference.py`는 NV12 GPU 프레임의 오른쪽 위에 현재 시간을 그리는 최소 예제입니다. `torch.from_dlpack()`을 이용해 CPU 복사 없이 프레임 데이터에 접근합니다.
 
 ## 테스트

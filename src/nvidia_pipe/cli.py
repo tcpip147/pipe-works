@@ -173,6 +173,46 @@ class LiveParameters:
         return self.parameters
 
 
+class LiveModel:
+    """Safely replace a model only after a complete, valid source reload."""
+
+    def __init__(self, model_path: str | Path, module: ModuleType) -> None:
+        self.model_path = Path(model_path).resolve()
+        self.module = module
+        self.accepts_parameters = callback_accepts_parameters(module.on_frame)
+        self._observed_revision = self._revision()
+
+    def _revision(self) -> tuple[int, int] | None:
+        try:
+            stat = self.model_path.stat()
+        except OSError:
+            return None
+        return (stat.st_mtime_ns, stat.st_size)
+
+    def refresh(self) -> tuple[ModuleType, bool]:
+        revision = self._revision()
+        if revision == self._observed_revision:
+            return self.module, self.accepts_parameters
+        self._observed_revision = revision
+        try:
+            candidate = load_module(self.model_path)
+            callback = getattr(candidate, "on_frame")
+            if not callable(callback):
+                raise TypeError("on_frame은 호출 가능해야 합니다")
+            if self._revision() != revision:
+                raise RuntimeError("모델 파일을 읽는 동안 다시 변경되었습니다")
+            self.module = candidate
+            self.accepts_parameters = callback_accepts_parameters(callback)
+            logger.info("변경된 추론 모델을 적용했습니다: %s", self.model_path)
+        except Exception as error:
+            logger.warning(
+                "추론 모델을 다시 읽지 못해 기존 모델을 사용합니다: %s (%s)",
+                self.model_path,
+                error,
+            )
+        return self.module, self.accepts_parameters
+
+
 def callback_accepts_parameters(callback: Any) -> bool:
     """Return whether a model callback can be invoked with parameters safely."""
     try:
@@ -218,8 +258,10 @@ def parse_args() -> argparse.Namespace:
 
 def load_module(path: str | Path) -> ModuleType:
     path = Path(path).resolve()
+    importlib.invalidate_caches()
+    revision = path.stat().st_mtime_ns
     spec = importlib.util.spec_from_file_location(
-        path.stem,
+        f"{path.stem}_{revision}",
         path,
     )
     if spec is None or spec.loader is None:
@@ -293,8 +335,8 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
     model = inference["model"]
     configure_cuda_dll_path()
     model_module = load_module(model)
+    live_model = LiveModel(model, model_module)
     live_parameters = LiveParameters(resolved_config_path, config)
-    model_accepts_parameters = callback_accepts_parameters(model_module.on_frame)
 
     sender = Sender(config, heartbeat_timeout=10)
     sender.start()
@@ -318,6 +360,7 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
                 try:
                     if frame_type == "pytorch":
                         with torch.cuda.stream(pipeline_stream), torch.inference_mode():
+                            model_module, model_accepts_parameters = live_model.refresh()
                             if model_accepts_parameters:
                                 processed_frame = model_module.on_frame(
                                     frame,

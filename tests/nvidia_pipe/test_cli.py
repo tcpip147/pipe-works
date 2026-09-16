@@ -12,6 +12,7 @@ import nvidia_pipe.cli as cli
 import nvidia_pipe.receive as receive_module
 from nvidia_pipe.cli import (
     PIPELINE_NAME_FILTER,
+    LiveModel,
     LiveParameters,
     callback_accepts_parameters,
     configure_pipeline_logging,
@@ -57,6 +58,34 @@ class CliContractTests(unittest.TestCase):
             self.assertEqual(parameters.refresh(), {"font-size": 28})
         finally:
             os.unlink(yaml_path)
+
+    def test_live_model_replaces_valid_source_and_retains_last_valid_module(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as file:
+            model_path = file.name
+            file.write("def on_frame(frame, infer):\n    return 'first'\n")
+        try:
+            active = cli.load_module(model_path)
+            model = LiveModel(model_path, active)
+            self.assertEqual(model.refresh()[0].on_frame(None, True), "first")
+
+            with open(model_path, "w", encoding="utf-8") as file:
+                file.write("def on_frame(frame, infer, parameters):\n    return 'second'\n")
+            stat = os.stat(model_path)
+            os.utime(model_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+            replacement, accepts_parameters = model.refresh()
+            self.assertTrue(accepts_parameters)
+            self.assertEqual(replacement.on_frame(None, True, {}), "second")
+
+            with open(model_path, "w", encoding="utf-8") as file:
+                file.write("def on_frame(:\n")
+            stat = os.stat(model_path)
+            os.utime(model_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+            retained, accepts_parameters = model.refresh()
+            self.assertIs(retained, replacement)
+            self.assertTrue(accepts_parameters)
+            self.assertEqual(retained.on_frame(None, True, {}), "second")
+        finally:
+            os.unlink(model_path)
     def test_invalid_config_fails(self):
         with self.assertRaises(ValueError): validate_config({})
         config = self.valid(); config["inference"]["interval_frames"] = -1
