@@ -1,7 +1,7 @@
-# Specification Quality Checklist: 기본 추론 예제
+# Specification Quality Checklist: YOLO 차량 검출 예제
 
-**Purpose**: Validate specification completeness and quality before planning  
-**Created**: 2026-09-15  
+**Purpose**: Validate specification completeness and quality before planning
+**Created**: 2026-09-18
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,4 +31,5 @@
 
 ## Notes
 
-- 005 기능에서 기본 예제의 책임만 분리했다. 파이프라인의 동적 모듈 호출 계약과 CUDA YOLO 예제는 005에 유지한다.
+- 2026-09-18: 시간 오버레이 요구사항을 자동차 검출과 초록색 상자 표시 요구사항으로 갱신했다.
+- 명세는 사용자 결과와 제약을 정의하고, GPU 변환·모델 호출·NV12 기록의 구현 세부사항은 `plan.md`에 분리했다.
