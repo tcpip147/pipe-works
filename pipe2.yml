@@ -22,3 +22,5 @@ inference:
   parameters:
     model: yolo11n.pt
     confidence: 0.25
+
+postprocess: examples/postprocess.py # 후처리 모델 파일 경로

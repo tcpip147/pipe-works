@@ -18,10 +18,12 @@ inference:
   interval_frames: 3 # 추론 주기 (프레임 수)
   input_format: native # 입력 프레임 포멧 (native, rgb, rgbp)
   frame_type: pytorch # 입력 프레임 타입 (pytorch)
-  model: examples/inference.py # 추론 모델 파일 경로
+  model: examples/timestamp.py # 추론 모델 파일 경로
   parameters:
     font-size: 50
     yuv:
       - 150
       - 43
       - 21
+
+postprocess: examples/postprocess.py # 후처리 모델 파일 경로

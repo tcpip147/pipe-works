@@ -25,6 +25,55 @@ class CliContractTests(unittest.TestCase):
     def test_valid_config_passes(self):
         validate_config(self.valid())
 
+    def test_postprocess_config_requires_a_non_empty_module_path(self):
+        config = self.valid()
+        config["postprocess"] = ""
+        with self.assertRaisesRegex(ValueError, "postprocess"):
+            validate_config(config)
+
+    def test_load_postprocess_requires_the_named_callback(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as file:
+            file.write("def on_inference_result(result):\n    return result\n")
+            path = file.name
+        try:
+            callback = cli.load_postprocess(path)
+            self.assertEqual(callback("result"), "result")
+        finally:
+            os.unlink(path)
+
+    def test_live_postprocess_reloads_valid_source_and_retains_last_callback(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as file:
+            postprocess_path = file.name
+            file.write("def on_inference_result(result):\n    return 'first'\n")
+        try:
+            postprocess = cli.LivePostprocess(
+                postprocess_path, cli.load_postprocess(postprocess_path)
+            )
+            self.assertEqual(postprocess.refresh()(None), "first")
+
+            with open(postprocess_path, "w", encoding="utf-8") as file:
+                file.write("def on_inference_result(result):\n    return 'second'\n")
+            stat = os.stat(postprocess_path)
+            os.utime(postprocess_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+            self.assertEqual(postprocess.refresh()(None), "second")
+
+            with open(postprocess_path, "w", encoding="utf-8") as file:
+                file.write("def on_inference_result(:\n")
+            stat = os.stat(postprocess_path)
+            os.utime(postprocess_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
+            self.assertEqual(postprocess.refresh()(None), "second")
+        finally:
+            os.unlink(postprocess_path)
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as file:
+            file.write("value = 1\n")
+            path = file.name
+        try:
+            with self.assertRaisesRegex(TypeError, "on_inference_result"):
+                cli.load_postprocess(path)
+        finally:
+            os.unlink(path)
+
     def test_jitter_buffer_config_requires_a_non_negative_integer(self):
         config = self.valid()
         config["input"]["rtsp"]["jitter_buffer"] = -1
@@ -159,6 +208,47 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(receive_module.out_of_order_frame_count, 0)
         self.assertEqual(len(submitted_packets), 2)
         self.assertEqual(model.on_frame.call_args.kwargs["parameters"], {})
+
+    def test_pipeline_submits_only_frames_with_inference_results(self):
+        frame = SimpleNamespace(inference_result=object())
+        packet = mock.Mock(codec="h264", packet_data=b"encoded")
+        dispatcher = mock.Mock()
+
+        class FakeSender:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def start(self):
+                pass
+
+            def submit(self, submitted_packet):
+                pass
+
+        model = mock.Mock()
+        model.on_frame.return_value = frame
+
+        with (
+            mock.patch.object(cli, "load_config", return_value=self.valid()),
+            mock.patch.object(cli, "configure_cuda_dll_path"),
+            mock.patch.object(cli, "load_module", return_value=model),
+            mock.patch.object(cli, "Sender", FakeSender),
+            mock.patch.object(cli, "receive", return_value=object()),
+            mock.patch.object(cli, "decode", return_value=[frame]),
+            mock.patch.object(
+                cli,
+                "encode",
+                side_effect=lambda frames, **_: ([*frames], [packet])[1],
+            ),
+            mock.patch.object(cli, "InferenceResultQueue", return_value=dispatcher),
+            mock.patch.object(cli, "replace", side_effect=lambda value, **_: value),
+            mock.patch.object(cli, "is_idr_keyframe", return_value=False),
+            mock.patch.object(cli, "torch"),
+        ):
+            cli.run_pipeline("pipeline.yml")
+
+        dispatcher.submit.assert_called_once()
+        self.assertIs(dispatcher.submit.call_args.args[0], frame.inference_result)
+        dispatcher.close.assert_called_once()
 
     def test_send_frame_statistics_posts_all_counters(self):
         cli.received_frame_count = 8

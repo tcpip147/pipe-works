@@ -13,5 +13,13 @@ class StreamContractTests(unittest.TestCase):
         self.assertEqual(gpu.frame_rate, Fraction(25, 1))
         self.assertEqual((encoded.codec, encoded.pts, encoded.packet_data), ("h264", 3, b"encoded"))
 
+    def test_gpu_frame_exposes_an_optional_inference_result(self):
+        gpu = GpuFrame(0, "h264", 1, 1, "NV12", Fraction(1, 1), None, 2, "frame")
+
+        self.assertIsNone(gpu.inference_result)
+        result = object()
+        gpu.set_inference_result(result)
+        self.assertIs(gpu.inference_result, result)
+
 if __name__ == "__main__":
     unittest.main()

@@ -108,5 +108,6 @@ def on_frame(frame: GpuFrame, infer: bool, parameters: dict | None = None) -> Gp
     model_path, confidence = _parameters(parameters)
     if infer or _last_car_boxes is None:
         _last_car_boxes = _detect_cars(frame, model_path, confidence)
+        frame.set_inference_result(_last_car_boxes)
     _draw_car_boxes_nv12(frame, _last_car_boxes)
     return frame

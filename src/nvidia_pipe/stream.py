@@ -25,6 +25,8 @@ class GpuFrame:
     __frame_rate: Fraction | None
     __pts: object
     __frame_data: object
+    __inference_result: object | None = None
+    __inference_result: object | None = None
 
     @property
     def gpuid(self) -> int:
@@ -64,6 +66,22 @@ class GpuFrame:
 
     def set_frame_data(self, frame_data: object) -> None:
         self.__frame_data = frame_data
+
+    @property
+    def inference_result(self) -> object | None:
+        """Return this frame's optional GPU inference result."""
+        return self.__inference_result
+
+    def set_inference_result(self, inference_result: object | None) -> None:
+        self.__inference_result = inference_result
+
+    @property
+    def inference_result(self) -> object | None:
+        """Return this frame's optional GPU inference result."""
+        return self.__inference_result
+
+    def set_inference_result(self, inference_result: object | None) -> None:
+        self.__inference_result = inference_result
 
 
 @dataclass(slots=True)

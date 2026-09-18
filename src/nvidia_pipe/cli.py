@@ -8,7 +8,7 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, Callable
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -17,6 +17,7 @@ import yaml
 
 from nvidia_pipe.decode import decode
 from nvidia_pipe.encode import encode
+from nvidia_pipe.infer_queue import InferenceResultQueue
 import nvidia_pipe.receive as receive_module
 from nvidia_pipe.receive import receive
 from nvidia_pipe.send import Sender, is_idr_keyframe
@@ -213,6 +214,41 @@ class LiveModel:
         return self.module, self.accepts_parameters
 
 
+class LivePostprocess:
+    """Safely replace the CPU result callback after a complete valid source reload."""
+
+    def __init__(self, path: str | Path, callback: Callable[[torch.Tensor], None]) -> None:
+        self.path = Path(path).resolve()
+        self.callback = callback
+        self._observed_revision = self._revision()
+
+    def _revision(self) -> tuple[int, int] | None:
+        try:
+            stat = self.path.stat()
+        except OSError:
+            return None
+        return (stat.st_mtime_ns, stat.st_size)
+
+    def refresh(self) -> Callable[[torch.Tensor], None]:
+        revision = self._revision()
+        if revision == self._observed_revision:
+            return self.callback
+        self._observed_revision = revision
+        try:
+            candidate = load_postprocess(self.path)
+            if self._revision() != revision:
+                raise RuntimeError("postprocess 파일을 읽는 동안 다시 변경되었습니다")
+            self.callback = candidate
+            logger.info("변경된 postprocess 모듈을 적용했습니다: %s", self.path)
+        except Exception as error:
+            logger.warning(
+                "postprocess를 다시 읽지 못해 기존 콜백을 사용합니다: %s (%s)",
+                self.path,
+                error,
+            )
+        return self.callback
+
+
 def callback_accepts_parameters(callback: Any) -> bool:
     """Return whether a model callback can be invoked with parameters safely."""
     try:
@@ -251,6 +287,11 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError(f"필수 추론 설정이 없습니다: {', '.join(missing)}")
     if int(inference["interval_frames"]) < 0:
         raise ValueError("interval_frames는 0 이상이어야 합니다")
+    postprocess = config.get("postprocess")
+    if postprocess is not None and (
+        not isinstance(postprocess, str) or not postprocess.strip()
+    ):
+        raise ValueError("postprocess must be a non-empty module path when configured")
 
 
 def parse_args() -> argparse.Namespace:
@@ -276,6 +317,15 @@ def load_module(path: str | Path) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_postprocess(path: str | Path) -> Callable[[torch.Tensor], None]:
+    """Load the configured CPU inference-result callback from a Python module."""
+    module = load_module(path)
+    callback = getattr(module, "on_inference_result", None)
+    if not callable(callback):
+        raise TypeError("postprocess module must define callable on_inference_result")
+    return callback
 
 
 def configure_cuda_dll_path() -> None:
@@ -342,6 +392,20 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
     model = inference["model"]
     configure_cuda_dll_path()
     model_module = load_module(model)
+    live_postprocess = (
+        LivePostprocess(
+            config["postprocess"], load_postprocess(config["postprocess"])
+        )
+        if "postprocess" in config
+        else None
+    )
+
+    def consume_inference_result(result: torch.Tensor) -> None:
+        if live_postprocess is None:
+            InferenceResultQueue._log_result(result)
+        else:
+            live_postprocess.refresh()(result)
+
     live_model = LiveModel(model, model_module)
     live_parameters = LiveParameters(resolved_config_path, config)
 
@@ -350,6 +414,7 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
 
     packets = receive(config)
     pipeline_stream = torch.cuda.Stream(device=gpuid)
+    inference_result_queue = InferenceResultQueue(consumer=consume_inference_result)
     frames = decode(config, packets, cuda_stream=pipeline_stream)
 
     def processed_frames():
@@ -384,6 +449,13 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
                     if should_infer:
                         inference_success_frame_count += 1
                     if processed_frame is not None:
+                        inference_result = getattr(
+                            processed_frame, "inference_result", None
+                        )
+                        if inference_result is not None:
+                            inference_result_queue.submit(
+                                inference_result, pipeline_stream
+                            )
                         yield processed_frame
                 except Exception as error:
                     if should_infer:
@@ -391,18 +463,21 @@ def run_pipeline(config_path: str | Path | None = None) -> None:
                     logger.debug("추론 실패: %s", error)
                     yield frame
 
-    packets = encode(processed_frames(), cuda_stream=pipeline_stream)
+    try:
+        packets = encode(processed_frames(), cuda_stream=pipeline_stream)
 
-    for packet in packets:
-        packet_data = encoded_bytes(packet.packet_data)
-        cpu_packet = replace(
-            packet,
-            packet_data=packet_data,
-            is_keyframe=is_idr_keyframe(packet.codec, packet_data),
-        )
+        for packet in packets:
+            packet_data = encoded_bytes(packet.packet_data)
+            cpu_packet = replace(
+                packet,
+                packet_data=packet_data,
+                is_keyframe=is_idr_keyframe(packet.codec, packet_data),
+            )
 
-        sender.submit(cpu_packet)
-        sent_frame_count += 1
+            sender.submit(cpu_packet)
+            sent_frame_count += 1
+    finally:
+        inference_result_queue.close()
 
 
 def run_pipeline_entry(

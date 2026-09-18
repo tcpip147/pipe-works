@@ -27,6 +27,11 @@ class FakeFrame:
         self.replacement = frame_data
         self.frame_data = frame_data
 
+    inference_result = None
+
+    def set_inference_result(self, inference_result):
+        self.inference_result = inference_result
+
 
 class InferenceExampleTests(unittest.TestCase):
     def setUp(self):
@@ -40,6 +45,7 @@ class InferenceExampleTests(unittest.TestCase):
 
         self.assertIs(result, frame)
         self.assertIs(frame.replacement, frame.frame_data)
+        self.assertIs(frame.inference_result, boxes)
         self.assertTrue(torch.any(frame.frame_data[: frame.height] == 150))
         self.assertTrue(torch.any(frame.frame_data[frame.height :, 0::2] == 43))
         self.assertTrue(torch.any(frame.frame_data[frame.height :, 1::2] == 21))
@@ -79,7 +85,6 @@ class InferenceExampleTests(unittest.TestCase):
         padded = inference._pad_to_yolo_stride(rgb)
 
         self.assertEqual(padded.shape, (1, 3, 1088, 1920))
-
 
 if __name__ == "__main__":
     unittest.main()

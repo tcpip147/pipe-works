@@ -11,6 +11,7 @@ PyNvVideoCodec의 GPU 디코드 프레임은 DLPack을 통해 PyTorch 텐서로 
 3. YOLO의 검출 결과 중 COCO 자동차 클래스만 유지한다.
 4. 자동차 상자 좌표로 GPU 마스크를 만들고, NV12의 휘도 및 색차 평면에 초록색 윤곽선을 기록한다.
 5. 추론이 생략된 프레임은 가장 최근의 GPU 상자 결과를 사용한다.
+6. 추론 결과는 별도 CUDA stream에서 pinned CPU 버퍼로 비동기 복사한다. 완료 event를 확인하는 daemon worker만 완료된 결과를 CPU 큐에 넣고, 큐가 가득 차면 가장 오래된 결과를 버린다.
 
 ## 파일 변경
 
