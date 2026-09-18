@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>영상 파이프라인 관리자</title>
+    <link rel="stylesheet" href="/static/index.css" />
+    <script src="/static/index.js"></script>
+  </head>
+  <body>
+    <main>
+      <section class="processes" aria-labelledby="processes-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Supervisor</p>
+            <h2 id="processes-title">Processes</h2>
+          </div>
+          <button class="text-button primary-button" id="open-add-process" type="button">
+            추가
+          </button>
+        </div>
+        <div class="process-list" id="process-list" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <dialog class="process-dialog" id="add-process-dialog" aria-labelledby="dialog-title">
+      <form method="dialog" id="add-process-form">
+        <header class="dialog-header">
+          <div>
+            <h2 id="dialog-title">Add Process</h2>
+          </div>
+          <button class="icon-button" type="button" id="close-add-process" aria-label="Close">×</button>
+        </header>
+
+        <div class="form-body">
+          <section class="form-section">
+            <h3>Process</h3>
+            <label>Process name<input name="name" type="text" placeholder="camera-001" required /></label>
+          </section>
+
+          <section class="form-section">
+            <h3>Input stream</h3>
+            <label>RTSP URL<input name="input_rtsp_url" type="url" placeholder="rtsp://" required /></label>
+            <div class="field-row">
+              <label>Transport<select name="input_transport"><option selected>tcp</option><option>udp</option></select></label>
+              <label>Jitter buffer<input name="jitter_buffer" type="number" min="0" value="30" required /></label>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <h3>Output stream</h3>
+            <label>RTSP URL<input name="output_rtsp_url" type="url" placeholder="rtsp://" required /></label>
+            <label>Transport<select name="output_transport"><option selected>tcp</option><option>udp</option></select></label>
+          </section>
+
+          <section class="form-section">
+            <h3>Metadata</h3>
+            <label class="toggle-field">
+              <input name="metadata_enabled" type="checkbox" checked />
+              <span>Enabled</span>
+            </label>
+            <div class="module-field"><label for="metadata-module">Module path</label><input id="metadata-module" name="metadata_module" type="text" /></div>
+          </section>
+
+          <section class="form-section">
+            <h3>Inference</h3>
+            <label class="toggle-field">
+              <input name="inference_enabled" type="checkbox" checked />
+              <span>Enabled</span>
+            </label>
+            <div class="module-field"><label for="inference-module">Module path</label><input id="inference-module" name="inference_module" type="text" required /></div>
+            <div class="field-row field-row--three">
+              <label>GPU ID<input name="gpuid" type="number" min="0" value="0" required /></label>
+              <label>Interval frames<input name="interval_frames" type="number" min="0" value="3" required /></label>
+              <label>Input format<select name="input_format"><option selected>native</option><option>rgb</option><option>rgbp</option></select></label>
+            </div>
+            <label class="field-after">Frame type<select name="frame_type"><option value="pytorch" selected>pytorch (torch.Tensor)</option></select></label>
+          </section>
+
+          <section class="form-section">
+            <h3>Postprocess</h3>
+            <label class="toggle-field">
+              <input name="postprocess_enabled" type="checkbox" checked />
+              <span>Enabled</span>
+            </label>
+            <div class="module-field"><label for="postprocess-module">Module path</label><input id="postprocess-module" name="postprocess_module" type="text" /></div>
+          </section>
+        </div>
+
+        <footer class="dialog-actions">
+          <button id="dialog-submit" type="submit" class="text-button primary-button">추가</button>
+          <button type="button" class="text-button secondary-button" id="cancel-add-process">취소</button>
+        </footer>
+      </form>
+    </dialog>
+  </body>
+</html>

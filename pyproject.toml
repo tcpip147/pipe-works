@@ -10,12 +10,15 @@ dependencies = [
     "torch==2.5.1",
     "torchvision==0.20.1",
     "numpy==1.26.4",
-    "ultralytics==8.4.146"
+    "ultralytics==8.4.146",
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.53.0",
 ]
 
 [project.scripts]
 plumber = "plumber.cli:main"
 nvidia-pipe = "nvidia_pipe.cli:main"
+conductor = "conductor.cli:main"
 
 [build-system]
 requires = ["setuptools>=61"]
