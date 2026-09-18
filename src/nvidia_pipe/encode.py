@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from fractions import Fraction
 import logging
 from nvidia_pipe.stream import GpuFrame
 from nvidia_pipe.stream import EncodedPacket
@@ -26,10 +27,15 @@ def encode(
     codec = None
     width = None
     height = None
-    time_base = None
+    output_time_base = None
     for frame in frames:
         if encoder is None:
             fps = encoder_fps(frame)
+            # NVENC returns packet timestamps in its output-frame clock.  Do
+            # not pair those values with the input RTSP clock (commonly
+            # 1/90000), otherwise a timestamp increment of one is interpreted
+            # as 1/90000 second rather than one encoded frame.
+            output_time_base = Fraction(1, fps)
             encoder_kwargs = {
                 "gpu_id": frame.gpuid,
                 "codec": frame.codec,
@@ -52,7 +58,6 @@ def encode(
             codec = frame.codec
             width = frame.width
             height = frame.height
-            time_base = frame.time_base
             logger.info(
                 "NVENC 인코더 초기화: gpu=%s codec=%s fps=%s idrperiod=%s",
                 frame.gpuid,
@@ -69,7 +74,7 @@ def encode(
                 codec,
                 width,
                 height,
-                time_base,
+                output_time_base,
                 packet_data.get("timestamp"),
                 packet_data,
             )
@@ -82,7 +87,7 @@ def encode(
                 codec,
                 width,
                 height,
-                time_base,
+                output_time_base,
                 packet_data.get("timestamp"),
                 packet_data,
             )

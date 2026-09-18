@@ -47,6 +47,8 @@ class SendTests(unittest.TestCase):
             )
 
         self.assertEqual(len(container.muxed), 1)
+        self.assertEqual(container.muxed[0].pts, 7)
+        self.assertEqual(container.muxed[0].dts, 7)
         self.assertNotEqual(heartbeat.value, 0)
         self.assertTrue(any("?깃났" in message or "성공" in message for message in logs.output))
         self.assertTrue(container.closed)

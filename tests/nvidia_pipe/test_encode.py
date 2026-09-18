@@ -56,7 +56,7 @@ class EncodeTests(unittest.TestCase):
         self.assertEqual(result[0].codec, "h264")
         self.assertEqual(result[0].width, 1920)
         self.assertEqual(result[0].height, 1080)
-        self.assertEqual(result[0].time_base, Fraction(1, 90000))
+        self.assertEqual(result[0].time_base, Fraction(1, 25))
         self.assertEqual(result[0].packet_data["payload"], "frame-0")
         self.assertEqual(encoder.inputs, [f"frame-{i}" for i in range(100)])
         self.assertEqual(nvc.kwargs["gpu_id"], 0)
@@ -71,9 +71,10 @@ class EncodeTests(unittest.TestCase):
         encoder = FakeEncoder()
         nvc = FakeNvc(encoder)
         with mock.patch.dict(sys.modules, {"PyNvVideoCodec": nvc}):
-            list(encode(iter([frame(1, Fraction(30000, 1001))])))
+            result = list(encode(iter([frame(1, Fraction(30000, 1001))])))
         self.assertEqual(nvc.kwargs["fps"], 30)
         self.assertEqual(nvc.kwargs["idrperiod"], 30)
+        self.assertEqual(result[0].time_base, Fraction(1, 30))
 
     def test_multiple_packets_per_frame_keep_output_order(self):
         class MultiPacketEncoder(FakeEncoder):

@@ -249,6 +249,10 @@ def send(
                     send_packet = av.Packet(packet.packet_data)
                     send_packet.stream = output_stream
                     send_packet.pts = packet.pts
+                    # NVENC is configured with bf=0, so decode and display
+                    # order are identical.  Supplying matching DTS prevents
+                    # the muxer/receiver from inferring a reordered timeline.
+                    send_packet.dts = packet.pts
                     send_packet.time_base = output_stream.time_base
                     container.mux(send_packet)
 
