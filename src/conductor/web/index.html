@@ -36,6 +36,10 @@
           <section class="form-section">
             <h3>Process</h3>
             <label>Process name<input name="name" type="text" placeholder="camera-001" required /></label>
+            <label class="toggle-field field-after">
+              <input name="desired_state" type="checkbox" />
+              <span>프로세스 종료 시 자동 복구</span>
+            </label>
           </section>
 
           <section class="form-section">
@@ -56,7 +60,7 @@
           <section class="form-section">
             <h3>Metadata</h3>
             <label class="toggle-field">
-              <input name="metadata_enabled" type="checkbox" checked />
+              <input name="metadata_enabled" type="checkbox" />
               <span>Enabled</span>
             </label>
             <div class="module-field"><label for="metadata-module">Module path</label><input id="metadata-module" name="metadata_module" type="text" /></div>
@@ -65,10 +69,10 @@
           <section class="form-section">
             <h3>Inference</h3>
             <label class="toggle-field">
-              <input name="inference_enabled" type="checkbox" checked />
+              <input name="inference_enabled" type="checkbox" />
               <span>Enabled</span>
             </label>
-            <div class="module-field"><label for="inference-module">Module path</label><input id="inference-module" name="inference_module" type="text" required /></div>
+            <div class="module-field"><label for="inference-module">Module path</label><input id="inference-module" name="inference_module" type="text" /></div>
             <div class="field-row field-row--three">
               <label>GPU ID<input name="gpuid" type="number" min="0" value="0" required /></label>
               <label>Interval frames<input name="interval_frames" type="number" min="0" value="3" required /></label>
@@ -80,7 +84,7 @@
           <section class="form-section">
             <h3>Postprocess</h3>
             <label class="toggle-field">
-              <input name="postprocess_enabled" type="checkbox" checked />
+              <input name="postprocess_enabled" type="checkbox" />
               <span>Enabled</span>
             </label>
             <div class="module-field"><label for="postprocess-module">Module path</label><input id="postprocess-module" name="postprocess_module" type="text" /></div>
@@ -88,10 +92,34 @@
         </div>
 
         <footer class="dialog-actions">
+          <p id="process-form-error" role="alert"></p>
           <button id="dialog-submit" type="submit" class="text-button primary-button">추가</button>
           <button type="button" class="text-button secondary-button" id="cancel-add-process">취소</button>
         </footer>
       </form>
+    </dialog>
+
+    <dialog class="process-dialog confirm-dialog" id="action-confirm-dialog" aria-labelledby="action-confirm-title">
+      <div class="confirm-content">
+        <h2 id="action-confirm-title"></h2>
+        <p><strong id="action-process-name"></strong> 프로세스를 <span id="action-confirm-message"></span></p>
+        <p class="dialog-error" id="action-process-error" role="alert"></p>
+      </div>
+      <footer class="dialog-actions">
+        <button id="confirm-process-action" type="button" class="text-button primary-button"></button>
+        <button id="cancel-process-action" type="button" class="text-button secondary-button">취소</button>
+      </footer>
+    </dialog>
+
+    <dialog class="process-dialog log-dialog" id="process-log-dialog" aria-labelledby="process-log-title">
+      <header class="dialog-header">
+        <div>
+          <h2 id="process-log-title">Logs</h2>
+          <p id="process-log-process-name"></p>
+        </div>
+        <button class="icon-button" type="button" id="close-process-logs" aria-label="Close">×</button>
+      </header>
+      <pre class="process-log-output" id="process-log-output" aria-live="polite"></pre>
     </dialog>
   </body>
 </html>

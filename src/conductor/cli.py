@@ -1,3 +1,4 @@
+from conductor.process.supervisor import Supervisor
 from conductor.web.http_server import HttpServer
 import logging
 
@@ -10,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    HttpServer(8900).run()
+    supervisor = Supervisor()
+    HttpServer(8900, supervisor).run()
 
 
 if __name__ == "__main__":

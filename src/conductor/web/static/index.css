@@ -128,8 +128,10 @@ button:not(:disabled):hover {
 
 .empty-state {
   display: grid;
-  min-height: 255px;
-  margin-top: 22px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
   padding: 44px 24px;
   place-items: center;
   border: 1px dashed #38516e;
@@ -148,6 +150,11 @@ button:not(:disabled):hover {
   margin-top: 22px;
   padding-right: 5px;
   overflow-y: auto;
+}
+
+.process-list.is-empty {
+  grid-template-columns: 1fr;
+  align-content: stretch;
 }
 
 .process-card {
@@ -263,6 +270,10 @@ button:not(:disabled):hover {
   gap: 7px;
 }
 
+.process-menu-container {
+  position: relative;
+}
+
 .process-actions button {
   display: grid;
   width: 34px;
@@ -288,10 +299,49 @@ button:not(:disabled):hover {
   background: #164937;
 }
 
-.process-actions .edit-button:hover {
+.process-actions .more-button:hover {
   border-color: #4581bd;
   color: #c7e4ff;
   background: #274a6c;
+}
+
+.process-context-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 92px;
+  padding: 5px;
+  border: 1px solid #36526f;
+  border-radius: 10px;
+  background: #101f30;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+}
+
+.process-context-menu[hidden] {
+  display: none;
+}
+
+.process-context-menu button {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  color: #c7d6e8;
+  background: transparent;
+  text-align: left;
+}
+
+.process-context-menu button:hover {
+  transform: none;
+  color: #fff;
+  background: #274a6c;
+}
+
+.process-context-menu .context-delete-button:hover {
+  color: #ffdce2;
+  background: #66313c;
 }
 
 .process-statistics {
@@ -384,6 +434,45 @@ code {
 .process-dialog::backdrop {
   background: rgba(3, 8, 14, 0.72);
   backdrop-filter: blur(4px);
+}
+
+.confirm-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.confirm-content {
+  padding: 26px 28px 22px;
+}
+
+.confirm-content h2 {
+  margin-bottom: 14px;
+}
+
+.confirm-content p {
+  margin-bottom: 0;
+  color: #a9b7c9;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.confirm-content strong {
+  color: #edf3ff;
+}
+
+.confirm-content .dialog-error {
+  min-height: 1.4em;
+  margin-top: 10px;
+  color: #f19aa7;
+}
+
+.delete-confirm-button {
+  border-color: #a94d5c;
+  color: #fff;
+  background: #66313c;
+}
+
+.delete-confirm-button:not(:disabled):hover {
+  background: #7a3845;
 }
 
 .dialog-header,
@@ -553,6 +642,33 @@ input[type="file"]::file-selector-button {
   padding: 12px 28px 18px;
   border-top: 1px solid #263c58;
   background: rgba(6, 14, 23, 0.48);
+}
+
+.log-dialog {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.log-dialog .dialog-header {
+  align-items: center;
+}
+
+.log-dialog .dialog-header p {
+  margin: 5px 0 0;
+  color: #9fb1c5;
+  font-size: 0.82rem;
+}
+
+.process-log-output {
+  min-height: 380px;
+  max-height: min(680px, calc(100vh - 170px));
+  margin: 0;
+  padding: 18px 22px;
+  overflow: auto;
+  color: #d6e4f6;
+  background: #09111d;
+  font: 0.78rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .text-button {
